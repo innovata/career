@@ -44,8 +44,22 @@ lid.jobs.iter_pagination()
 lid.jobs.collect_on_keyword(keyword='Data Analysis', location='United Kingdom', duration=0)
 # lid.jobs.collect_on_keyword(keyword='natural language processing', location='Spain', duration=0)
 lid.jobs.collect_on_keyword(keyword='data engineer', location='Spain', duration=0)
-lid.jobs.collect_on_keywords(location='Spain', duration=0)
-lid.jobs.collect_on_keywords(location='United Kingdom', duration=0)
+
+search_keywords = [
+    # 'Data Analytics',
+    # 'Data Analysis',
+    # 'Data Scientist',
+    'Data Science',
+    'Data Engineer',
+    'Machine Learning',
+    'Artificial Intelligence (AI)',
+    'Natural Language Processing',
+    'Business Intelligence (bi)',
+    'Python',
+    'Node.js',
+]
+lid.jobs.collect_on_keywords(location='Spain', duration=0, search_keywords=search_keywords)
+lid.jobs.collect_on_keywords(location='United Kingdom', duration=0, search_keywords=search_keywords)
 
 
 #============================================================

@@ -304,29 +304,24 @@ class JobCards(JobDetails):
         try:
             jobcard_ul = self.driver.find_element_by_class_name('jobs-search-results__list')
         except Exception as e:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
-            return False
+            self.jobcards_iterable = False
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}\n self.jobcards_iterable : {self.jobcards_iterable}")
         else:
-            print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Job-cards exist.")
             self.jobcards = jobcard_ul.find_elements_by_class_name('artdeco-list__item')
-            return True
+            self.jobcards_iterable = True
+            print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Job-cards exist.\n self.jobcards_iterable : {self.jobcards_iterable}")
+        finally:
+            return self
 
     def find_active_jobcard(self):
         if hasattr(self,'jobcards'):
             for i, jobcard in enumerate(self.jobcards):
-                if True:
-                    try: jobcard.find_element_by_class_name('job-card-search--is-active')
-                    except Exception as e: pass
-                    else:
-                        self.active_jobcard_num = i
-                        self.active_jobcard = self.jobcards[i]
-                        break
+                try: jobcard.find_element_by_class_name('job-card-search--is-active')
+                except Exception as e: pass
                 else:
-                    actives = jobcard.find_elements_by_class_name('job-card-search--is-active')
-                    if len(actives) is 1:
-                        self.active_jobcard_num = i
-                        self.active_jobcard = self.jobcards[i]
-                        break
+                    self.active_jobcard_num = i
+                    self.active_jobcard = self.jobcards[i]
+                    break
             if hasattr(self,'active_jobcard_num') is False:
                 print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Active-Jobcard 가 존재하지 않는 말도 안되는 상황.")
         else:
@@ -334,7 +329,6 @@ class JobCards(JobDetails):
         return self
 
     def click_next_jobcard(self):
-        self.find_active_jobcard()
         if hasattr(self,'active_jobcard_num'):
             if len(self.jobcards) is (self.active_jobcard_num+1):
                 self.jobcards_iterable = False
@@ -348,45 +342,56 @@ class JobCards(JobDetails):
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n hasattr(self,'active_jobcard_num') is False.")
 
     def parse_active_jobcard(self):
-        active_jobcard = self.driver.find_elements_by_class_name('job-card-search--is-active')
-        if len(active_jobcard) is 1:
-            jobcard = active_jobcard[0].find_elements_by_class_name('job-card-search__content-wrapper')
-            if len(jobcard) is 1:
-                print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}")
-                job_title = jobcard[0].find_elements_by_class_name('job-card-search__title')
-                if len(job_title) is 1:
-                    self.title = job_title[0].text
-                    print(f" title : {self.title}")
-                else:
-                    print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(job_title) is not 1.\n")
-
-                companyname = jobcard[0].find_elements_by_class_name('job-card-search__company-name')
-                if len(companyname) is 1:
-                    self.companyname = companyname[0].text
-                    print(f" companyname : {self.companyname}")
-                else:
-                    print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(companyname) is not 1.\n")
-
-                location = jobcard[0].find_elements_by_class_name('job-card-search__location')
-                if len(location) is 1:
-                    self.location = location[0].text
-                else:
-                    print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(location) is not 1.\n")
-            else:
-                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(jobcard) is not 1.\n")
+        try:
+            active_jobcard = self.driver.find_element_by_class_name('job-card-search--is-active')
+        except Exception as e:
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
         else:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 이런 경우는 절대 발생할 수 없다.\n")
+            try:
+                jobcard = active_jobcard.find_element_by_class_name('job-card-search__content-wrapper')
+            except Exception as e:
+                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
+            else:
+                print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}")
+                ############################################################
+                try:
+                    title = jobcard.find_element_by_class_name('job-card-search__title')
+                except Exception as e:
+                    print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
+                else:
+                    self.title = title.text.strip()
+                    print(f" job-title : {self.title}")
+                ############################################################
+                try:
+                    companyname = jobcard.find_element_by_class_name('job-card-search__company-name')
+                except Exception as e:
+                    print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
+                else:
+                    self.companyname = companyname.text.strip()
+                    print(f" companyname : {self.companyname}")
+                ############################################################
+                try:
+                    location = jobcard.find_element_by_class_name('job-card-search__location')
+                except Exception as e:
+                    print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
+                else:
+                    self.location = location.text.strip()
+                    print(f" job-location : {self.location}")
 
     def iter_jobcards(self):
         if hasattr(self,'collect_dt') and hasattr(self,'search_keyword') and hasattr(self,'search_location'):
             self.jobcards_iterable = True
             while self.jobcards_iterable:
-                self.if_stay_in_job_search_page()
-                if self.detect_jobcards():
-                    self.find_active_jobcard().parse_active_jobcard()
-                    self.collect_job_details()
-                    # time.sleep(5)
+                """링크드인의 장난질에 대한 대응."""
+                if self.if_LinkedIn_is_pranking():
                     self.find_active_jobcard().click_next_jobcard()
+                else:
+                    pass
+                """링크드인의 장난질에 대한 대응 - 끝."""
+                self.parse_active_jobcard()
+                self.collect_job_details()
+                # time.sleep(5)
+                self.detect_jobcards().find_active_jobcard().click_next_jobcard()
         else:
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n hasattr(self,'search_keyword') and hasattr(self,'search_location') is False.")
 
@@ -413,12 +418,11 @@ class Pagination(JobCards):
                 delattr(self, 'pages')
             self.pagelen = 1
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(indicators) is 0.")
-            return False
         else:
             self.pages_iterable = True
             self.pages = indicators
             self.pagelen = int(indicators[-1].text.strip())
-            return True
+        return self
 
     def find_selected_page(self):
         if hasattr(self,'pages'):
@@ -456,10 +460,15 @@ class Pagination(JobCards):
         if hasattr(self,'collect_dt') and hasattr(self,'search_keyword') and hasattr(self,'search_location'):
             self.pages_iterable = True
             while self.pages_iterable:
+                """링크드인의 장난질에 대한 대응."""
+                if self.if_LinkedIn_is_pranking():
+                    self.find_selected_page().click_next_page()
+                else:
+                    pass
+                """링크드인의 장난질에 대한 대응 - 끝."""
                 self.detect_pagination()
-                self.find_selected_page()
                 self.iter_jobcards()
-                self.find_selected_page().click_next_page()
+                self.detect_pagination().find_selected_page().click_next_page()
                 self.report_pageloop()
         else:
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n hasattr(self,'search_keyword') and hasattr(self,'search_location') is False.")
@@ -511,12 +520,13 @@ class JobsDriver(SearchCondition, Pagination):
         else:
             pass
 
-    def if_stay_in_job_search_page(self):
+    def if_LinkedIn_is_pranking(self):
         if re.search(self.base_url, string=self.driver.current_url) is None:
-            print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 현재페이지가 Job Search page가 아니므로, 이전페이지로 회귀.")
+            print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 링크드인이 장난질 치고 있으므로, 검색 페이지로 회귀.")
             self.driver.back()
+            return True
         else:
-            pass
+            return False
 
     def is_readyto_collect(self):
         uo = urlparse(self.driver.current_url)
