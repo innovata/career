@@ -1,12 +1,6 @@
 * What machine learning libreries have you used if any? Pandas; Scikit; Weka; Neo4j; Akka; TensorFlow; GBM; Keras; Pytorch; ANOVA; Theano; Caret; MCMC
 #============================================================ IDE.
 from jupyter.hydrogen import *
-%env USERID=innovata@naver.com
-%env PW=abc54321
-# %env USERID=iinnovata@gmail.com
-# %env PW=5272Dkgkgk
-# export USERID=innovata@naver.com
-# export PW=abc54321
 #============================================================ Main.
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait

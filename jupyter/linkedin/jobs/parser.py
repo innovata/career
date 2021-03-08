@@ -7,26 +7,6 @@ from bs4 import BeautifulSoup
 import re
 from career import models
 
-#============================================================
-"""Handler."""
-#============================================================
-
-filter = {}
-update = {'$rename':{'employees':'n_employees'}}
-# self.tbl.update_many(filter, update, False)
-
-
-#============================================================
-"""검사."""
-#============================================================
-
-ids = self.tbl.distinct('_id', {'html':{'$ne':None}})
-len(ids)
-ids = self.tbl.distinct('_id', {'html':None})
-len(ids)
-n_employees = self.tbl.distinct('n_employees')
-len(n_employees)
-n_employees
 
 #============================================================
 """Initialize | Reload."""
@@ -34,25 +14,49 @@ n_employees
 
 importlib.reload(models)
 importlib.reload(jobs)
-
-#============================================================
-"""1차."""
-#============================================================
-
 self = jobs.HTMLParser()
-# self.load_targets()
-filter = {'html':{'$ne':None}, 'collect_dt':{'$ne':None}}
-# filter = {'html':{'$ne':None}, 'collect_dt':{'$ne':None}, 'companyname':'letgo'}
-# filter = {'html':{'$ne':None}, 'collect_dt':{'$ne':None}, 'n_employees':{'$ne':None}}
-self.inputs
-self.output
-self.collect_upsert_keys
-projection = {e:1 for e in self.collect_upsert_keys + self.output}
-self.cursor = self.tbl.find(filter,projection).limit(10)
-self.docs = list(self.cursor)
-len(self.docs)
-self.get_df()
 
+
+#============================================================
+"""HTMLParser."""
+#============================================================
+
+"""load_targets."""
+
+# self.load_targets()
+self.filter
+self.projection
+self.cursor = self.tbl.find(self.filter, self.projection).limit(100)
+self.load(True)
+
+
+# ------------------------------------------------------------
+# company_logo
+# ------------------------------------------------------------
+
+company_logo_urls = []
+for i,d in enumerate(self.docs):
+    self.attributize(d)
+    self.soup = BeautifulSoup(self.html, 'html.parser')
+    ############################################################
+    s = self.soup.find('div', class_='jobs-details-top-card__company-logo-container')
+    if s is None:
+        print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 'jobs-details-top-card__company-logo-container' is None.")
+    else:
+        img = s.find('img')
+        if img is None:
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 'img-tag' is None.")
+        else:
+            if 'src' in list(img.attrs):
+                print(f" i : {i}")
+                self.company_logo_url = img.attrs['src']
+                company_logo_urls.append(self.company_logo_url)
+    ############################################################
+company_logo_urls
+
+# ------------------------------------------------------------
+# n_views
+# ------------------------------------------------------------
 
 d = self.docs[0]
 # d
@@ -71,40 +75,50 @@ m.groups()
 m1 = m.groups()[0].split('-')
 m1
 
+# ------------------------------------------------------------
+# companyinfo_box
+# ------------------------------------------------------------
 
-
-
-new_docs = []
-for i, d in enumerate(self.docs):
+company_cates = []
+rng_employees_li = []
+n_employees_li = []
+for i,d in enumerate(self.docs):
     self.attributize(d)
     self.soup = BeautifulSoup(self.html, 'html.parser')
-    self.company_logo()
-    self.job_title()
-    self._companyname()
-    self.job_location()
-    self.postedtimeago_views()
-    self.job_box()
-    self.company_box()
-    self.connections_box()
-    self.job_description()
-    self._seniority_level_in_job_description()
-    self._industries()
-    self._employment_type()
-    self._job_functions()
-    self.how_you_match()
-    self._applicant_topskills()
-    self._applicant_seniority_levels()
-    self._applicant_educations()
-    self._applicant_locations()
-    self.hiring_trend()
-    self._tenure()
-    self.commute()
-    self._about_us()
-    new_docs.append(self.schematize().doc.copy())
-    # break
-# pp.pprint(self.schematize().doc)
+    ############################################################
+    try:
+        s = self.soup.find('div',attrs={'data-test-job-summary-type':'company-list'})
+    except Exception as e:
+        print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
+    else:
+        items = s.find_all('li')
+        for item in items:
+            text = item.get_text().strip()
+            m = self.p_rng_employees.search(string=text)
+            if m is None:
+                self.company_cate = text
+                company_cates.append(self.company_cate)
+            else:
+                self.rng_employees= m.groups()[0]
+                if len(self.rng_employees.split('-')) is 2:
+                    min = self.cleaner.purify_number(self.rng_employees.split('-')[0])
+                    max = self.cleaner.purify_number(self.rng_employees.split('-')[1])
+                    self.n_employees = round((min + max)/2, 0)
+                else:
+                    self.n_employees = self.cleaner.n_employees(self.rng_employees)
+                rng_employees_li.append(self.rng_employees)
+                n_employees_li.append(self.n_employees)
+    ############################################################
+company_cates
+rng_employees_li
+n_employees_li
 
-# sorted(self.__dict__)
+"""parse."""
+
+
+
+
+
 
 for k, v in self.schematize().doc.items():
     print(f"{'-'*60}\n {k} : {type(v)}")
@@ -125,46 +139,7 @@ inspect_specific_row_dtype(df, 8)
 # df.match_skills
 df.info()
 df
+
 #============================================================
 """2차 Parser."""
 #============================================================
-
-importlib.reload(jobs)
-self = jobs.DocDataParser()
-
-"""컬럼별 데이터-타입 조사"""
-
-self.tbl.find()
-
-# dir(self)
-self.load_targets()
-df = self.get_df()
-df.dropna(axis=0, how='all', subset=['views'])[:1].T
-
-# df = self.clean_dtcols(self.get_df())
-numdf = self.clean_numcols(self.get_df())
-numdf0 = numdf.copy()
-sorted(self.num_cols)
-numdf.info()
-numdf
-
-"""숫자+문자열 조합에서 숫자를 추출."""
-
-
-numdf = numdf0.copy()
-numdf =
-
-numdf.sort_values('n_applicants')
-
-
-
-
-
-
-
-text = '6–10 applicants'
-text = '1–5 applicants'
-p_applicant_location_cnt = re.compile('(\d+\W\d+)\s*(applicant[s]*)')
-m = p_applicant_location_cnt.search(string=text)
-print(m)
-m.groups()

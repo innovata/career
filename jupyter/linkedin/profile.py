@@ -4,8 +4,7 @@ from selenium import webdriver
 from selenium.webdriver.common.action_chains import ActionChains
 from career import linkedin
 from datetime import datetime
-%env USERID=iinnovata@gmail.com
-%env PW=5272Dkgkgk
+
 
 #============================================================
 """Initialize."""

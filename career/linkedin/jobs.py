@@ -27,9 +27,10 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 #============================================================ Project
-from career import models
+from career import models, PJT_PATH
 from career.iiterator import FunctionIterator
 from career import selenium as sln
+DATA_PATH = f"{PJT_PATH}/career/data/linkedin/jobs"
 #============================================================ Libs
 import sys
 sys.path.append('/Users/sambong/libs/idebug')
@@ -58,6 +59,7 @@ class LinkedInDefender:
 
     def if_LinkedIn_is_pranking(self):
         if re.search(pattern=self.base_url, string=self.driver.current_url) is None:
+            ############################################################ CASE.1
             if self.p_login_url.search(string=self.driver.current_url) is not None:
                 print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 링크드인이 장난질 치고 있는데, 강제 로그아웃시켰으므로 재로그인.")
                 self.driver.find_element(By.ID, 'username').clear()
@@ -66,8 +68,10 @@ class LinkedInDefender:
                 self.driver.find_element(By.ID, 'password').send_keys(self.pw)
                 self.driver.find_element(By.CLASS_NAME, "login__form_action_container").find_element(By.TAG_NAME, "button").click()
             else:
-                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 링크드인이 장난질 치고 있으므로, 검색 페이지로 회귀.")
+                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 링크드인이 장난질 치고 있으므로, 검색 페이지로 회귀 후 5초간 기다리기.")
                 self.driver.back()
+                time.sleep(5)
+            ############################################################ CASE.2
             if self.p_robot_url.search(string=self.driver.current_url) is not None:
                 print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n '로봇이 아닙니다' 검증페이지로 이동할 경우, 프로그렘 정지.")
             return True
@@ -151,7 +155,7 @@ class SearchCondition:
             # 기간 선택.
             sln.clicker(webelem=values[duration].find_element(By.TAG_NAME, 'label'), secs=1)
             # 필터 적용.
-            sln.clicker(webelem=facets.find_element(By.XPATH, "//button[contains(@data-control-name, 'filter_pill_apply')]"), secs=2)
+            sln.clicker(webelem=facets.find_element(By.XPATH, "//button[contains(@data-control-name, 'filter_pill_apply')]"), secs=3)
         finally:
             return self
 
@@ -185,6 +189,7 @@ class JobDetails:
         print(f"{'='*60}\n JobDetails.__init__() Starts.")
         super().__init__()
         print(f"{'='*60}\n JobDetails.__init__() Ends.")
+        self.schema = self.collect_cols
 
     def detect_job_details(self):
         try:
@@ -526,11 +531,12 @@ class JobsDriver(SearchCondition, Pagination, JobCards, JobDetails, models.Linke
                 self.jobcards_iterable = True
                 while self.jobcards_iterable:
                     ############################################################
-                    if self.if_LinkedIn_is_pranking():
-                        self.scrollto_last_jobcard().next_jobcard(step=2)
-                    ############################################################
+                    if self.if_LinkedIn_is_pranking(): self.scrollto_last_jobcard().next_jobcard(step=2)
                     self.parse_active_jobcard()
+                    if self.if_LinkedIn_is_pranking(): self.scrollto_last_jobcard().next_jobcard(step=2)
                     self.act_in_job_details()
+                    if self.if_LinkedIn_is_pranking(): self.scrollto_last_jobcard().next_jobcard(step=2)
+                    ############################################################
                     self.next_jobcard()
                 self.next_page().report_pageloop()
 
@@ -569,14 +575,13 @@ class JobsDriver(SearchCondition, Pagination, JobCards, JobDetails, models.Linke
 
 class HTMLParser(models.LinkedInJobPosting):
     """HTML element detection만을 위한 regex를 이곳에서 정의한다."""
-    p_posted_time_ago = re.compile('(Posted)\s*(\d+)\s*(.+)ago', flags=re.I)
-    p_views = re.compile('([\d+,]+)\s*(view[s]*)')
+    p_posted_time_ago = re.compile('Posted\s*(\d+)\s*(.+)ago', flags=re.I)
+    p_n_views = re.compile('([\d+,]+)\s*(view[s]*)')
 
-    p_skills_match_ratio = re.compile('\d+ skills match$')
-    p_n_applicants = re.compile('\d+ applicant[s]*')
+    p_skills_match_ratio = re.compile('(\d+/\d+)\s*(skills match$)')
+    p_n_applicants = re.compile('(\d+)\s*(applicant[s]*)')
     p_seniority_level = re.compile('([\w-]+)\s*(level)$')
     p_rng_employees = re.compile('([\d,-]+)\s*(employee[s]*)')
-    p_n_employees = re.compile('^([\d,]+)\s*(employee[s]*)')
 
     # p_seniority_level = re.compile('(\d+)\s*(\w+\s\w+)\s*(applicant[s]*)')
     p_applicant_education = re.compile('^jobs[a-z\s-]+__list')
@@ -585,18 +590,17 @@ class HTMLParser(models.LinkedInJobPosting):
     p_applicant_location_nm = re.compile('top-locations-title$')
     p_applicant_location_cnt = re.compile('top-locations-details$')
 
-    p_total_employees = re.compile('Total employee[s]*', flags=re.I)
+    p_total_employees = re.compile('([0-9,]+)\s*(Total employee[s]*)', flags=re.I)
     p_company_growthrate = re.compile('Company-wide', flags=re.I)
     p_tenure = re.compile('[\.\d+]+\s*year[s]*')
 
-    # filter = {'html':{'$ne':None}, 'desc':None}
-    # filter = {'html':{'$ne':None}}
     filter = {'html':{'$ne':None}, 'collect_dt':{'$ne':None}}
-    projection = {'collect_dt':1,'html':1}
+    projection = {'html':1, 'collect_dt':1}
 
     def __init__(self):
         super().__init__()
-        self.change_schema()
+        self.schema = self.parse_cols
+        # self.change_schema()
         self.cleaner = DataValueCleaner()
 
     def change_schema(self):
@@ -616,53 +620,65 @@ class HTMLParser(models.LinkedInJobPosting):
         if projection is not None:
             self.projection = projection
         self.cursor = self.tbl.find(self.filter, self.projection)
-        self.load()
-        print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(self.docs) : {len(self.docs)}")
+        self.load(True)
         fr.report_fin()
         return self
     ############################################################Job-Card
-    def jobcard_title(self):
-        pass
+    def job_title(self):
+        try:
+            self.topcard_job_title()
+        except Exception as e:
+            self.topcard_job_title()
+        else:
+            pass
 
-    def jobcard_companyname(self):
-        pass
+    def _companyname(self):
+        try:
+            self.topcard_companyname()
+        except Exception as e:
+            self.topcard_companyname()
+        else:
+            pass
 
-    def jobcard_location(self):
-        pass
+    def job_location(self):
+        try:
+            self.topcard_job_location()
+        except Exception as e:
+            self.topcard_job_location()
+        else:
+            pass
     ############################################################Top-Card
     """job-title, companyname, location, posted_time_ago, views"""
     def company_logo(self):
         s = self.soup.find('div', class_='jobs-details-top-card__company-logo-container')
         if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 'jobs-details-top-card__company-logo-container' is None.")
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n s == None.")
         else:
             img = s.find('img')
             if img is None:
                 print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 'img-tag' is None.")
             else:
                 if 'src' in list(img.attrs):
-                    # print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n img.attrs :")
-                    # pp.pprint(img.attrs)
                     self.company_logo_url = img.attrs['src']
 
-    def job_title(self):
+    def topcard_job_title(self):
         s = self.soup.find('h1', class_='jobs-details-top-card__job-title')
         if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 'jobs-details-top-card__job-title' is None.")
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n s == None.")
         else:
             self.title = s.get_text().strip()
 
-    def _companyname(self):
+    def topcard_companyname(self):
         s = self.soup.find('a', class_='jobs-details-top-card__company-url')
         if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 'Top-Card__Company-Name' is None.")
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n s == None.")
         else:
             self.companyname = s.get_text().strip()
 
-    def job_location(self):
+    def topcard_job_location(self):
         s = self.soup.find(class_='jobs-details-top-card__company-info')
         if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n class_='jobs-details-top-card__company-info' is None.")
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n s == None.")
         else:
             companylocation = s.find(class_='jobs-details-top-card__bullet')
             if companylocation is None:
@@ -670,62 +686,98 @@ class HTMLParser(models.LinkedInJobPosting):
             else:
                 self.location = companylocation.get_text().strip()
 
-    def postedtimeago_views(self):
+    def _posted_time_ago(self):
         s = self.soup.find('p', class_='jobs-details-top-card__job-info')
         if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 'jobs-details-top-card__job-info' is None.")
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n s == None.")
         else:
             for string in s.stripped_strings:
                 string = string.strip()
-                if self.p_posted_time_ago.search(string=string) is not None:
+                m = self.p_posted_time_ago.search(string=string)
+                if m is not None:
                     self.posted_time_ago = string
-                    ago_timedelta = self.cleaner.posted_time_ago(v=string, regex=self.p_posted_time_ago)
-                    self.calc_posted_dt(ago_timedelta)
-                if self.p_views.search(string=string) is not None:
-                    self.n_views = self.cleaner.views(v=string, regex=self.p_views)
+                    v = int(m.groups()[0])
+                    unit = m.groups()[1]
+                    if 'second' in unit:
+                        tdelta = timedelta(seconds=v)
+                    elif 'minute' in unit:
+                        tdelta = timedelta(minutes=v)
+                    elif 'hour' in unit:
+                        tdelta = timedelta(hours=v)
+                    elif 'day' in unit:
+                        tdelta = timedelta(days=v)
+                    elif 'week' in unit:
+                        tdelta = timedelta(weeks=v)
+                    elif 'month' in unit:
+                        tdelta = timedelta(days=v*30.5)
+                    elif 'year' in unit:
+                        tdelta = timedelta(days=v*365)
+                    else:
+                        tdelta = v
+                    self.posted_dt = self.collect_dt - tdelta
+        return self
 
-    def calc_posted_dt(self, ago_timedelta):
-        if hasattr(self,'collect_dt'):
-            self.posted_dt = self.collect_dt - ago_timedelta
+    def _n_views(self):
+        s = self.soup.find('p', class_='jobs-details-top-card__job-info')
+        if s is None:
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n s == None.")
         else:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n hasattr(self,'collect_dt') is False.")
+            for string in s.stripped_strings:
+                string = string.strip()
+                m = self.p_n_views.search(string=string)
+                if m is not None:
+                    self.n_views = self.cleaner.purify_number(v=m.groups()[0])
     ############################################################Job-Summary-3-boxes
     def job_box(self):
-        job_box = self.soup.find('div',attrs={'data-test-job-summary-type':'job-list'})
-        if job_box is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 3-boxes | job_box is None.")
-        else:
-            items = job_box.find_all('li')
-            for item in items:
-                text = item.get_text().strip()
-                if self.p_skills_match_ratio.search(string=text) is not None:
-                    self.skills_match_ratio = self.cleaner.skills_match_ratio(text)
-                if self.p_n_applicants.search(string=text) is not None:
-                    self.n_applicants = self.cleaner.n_applicants(text)
-                m = self.p_seniority_level.search(string=text)
-                if m is not None:
-                    self.job_level = m.groups()[0]
-
-    def company_box(self):
-        s = self.soup.find('div',attrs={'data-test-job-summary-type':'company-list'})
-        if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 3-boxes | company_box is None.")
+        try:
+            s = self.soup.find('div',attrs={'data-test-job-summary-type':'job-list'})
+        except Exception as e:
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
         else:
             items = s.find_all('li')
             for item in items:
                 text = item.get_text().strip()
-                if self.p_n_employees.search(string=text) is not None:
-                    self.n_employees = self.cleaner.n_employees(text)
-                m = self.p_rng_employees.search(string=text)
-                if m is not None:
-                    self.rng_employees= m.groups()[0]
-                if len(item) is 2:
-                    self.company_cate = text
 
-    def connections_box(self):
-        s = self.soup.find('div',attrs={'data-test-job-summary-type':"connections-list"})
-        if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 3-boxes | connections_box is None.")
+                m = self.p_skills_match_ratio.search(string=text)
+                if m is not None:
+                    self.skills_match_ratio = m.groups()[0].strip()
+
+                m = self.p_n_applicants.search(string=text)
+                if m is not None:
+                    self.n_applicants = self.cleaner.purify_number(v=m.groups()[0].strip())
+
+                m = self.p_seniority_level.search(string=text)
+                if m is not None:
+                    self.job_level = m.groups()[0].strip()
+
+    def companyinfo_box(self):
+        try:
+            s = self.soup.find('div',attrs={'data-test-job-summary-type':'company-list'})
+        except Exception as e:
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
+        else:
+            items = s.find_all('li')
+            for item in items:
+                text = item.get_text().strip()
+                m = self.p_rng_employees.search(string=text)
+                if m is None:
+                    self.company_cate = text
+                else:
+                    self.rng_employees= m.groups()[0]
+                    if len(self.rng_employees.split('-')) is 2:
+                        min = self.cleaner.purify_number(self.rng_employees.split('-')[0])
+                        max = self.cleaner.purify_number(self.rng_employees.split('-')[1])
+                        self.n_employees = round((min + max)/2, 0)
+                    else:
+                        self.n_employees = self.cleaner.n_employees(self.rng_employees)
+        finally:
+            return self
+
+    def _connections(self):
+        try:
+            s = self.soup.find('div',attrs={'data-test-job-summary-type':"connections-list"})
+        except Exception as e:
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
         else:
             self.connections = []
             for atag in s.find_all('a',attrs={'data-control-name':"jobdetails_sharedconnections"}):
@@ -738,7 +790,7 @@ class HTMLParser(models.LinkedInJobPosting):
     def job_description(self):
         s = self.soup.find(id='job-details')
         if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n id='job-details' is None.")
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 'Job-Description' is None.")
         else:
             self.desc = s.find('span').get_text().strip()
 
@@ -860,14 +912,16 @@ class HTMLParser(models.LinkedInJobPosting):
         """Hiring trends over the last 2 years"""
         for li in self.soup.find_all('li',class_='jobs-premium-company-growth__stat-item'):
             mixed_txt = li.get_text().strip()
-            if self.p_total_employees.search(string=mixed_txt) is not None:
-                self.total_employees = self.cleaner.total_employees(mixed_txt)
-            elif self.p_company_growthrate.search(string=mixed_txt) is not None:
+            m1 = self.p_total_employees.search(string=mixed_txt)
+            m2 = self.p_company_growthrate.search(string=mixed_txt)
+            if m1 is not None:
+                self.total_employees = self.cleaner.purify_number(v=m1.groups()[0])
+            elif m2 is not None:
                 text = li.find('span', class_='visually-hidden').get_text().strip()
-                self.company_growthrate = self.cleaner.growth(text)
+                self.company_growthrate = self.cleaner.percent_str(v=text)
             else:
                 text = li.find('span', class_='visually-hidden').get_text().strip()
-                self.sector_growthrate = self.cleaner.growth(text)
+                self.sector_growthrate = self.cleaner.percent_str(v=text)
 
     def _tenure(self):
         """Average tenure"""
@@ -897,28 +951,36 @@ class HTMLParser(models.LinkedInJobPosting):
         for d in self.docs:
             self.attributize(d)
             self.soup = BeautifulSoup(self.html, 'html.parser')
-            self.company_logo()
+            ############################################################
             self.job_title()
             self._companyname()
             self.job_location()
-            self.postedtimeago_views()
+            self.company_logo()
+            self._posted_time_ago()
+            self._n_views()
+            ############################################################
             self.job_box()
-            self.company_box()
-            self.connections_box()
+            self.companyinfo_box()
+            self._connections()
+            ############################################################
             self.job_description()
             self._seniority_level_in_job_description()
             self._industries()
             self._employment_type()
             self._job_functions()
             self.how_you_match()
+            ############################################################
             self._applicant_topskills()
             self._applicant_seniority_levels()
             self._applicant_educations()
             self._applicant_locations()
+            ############################################################
             self.hiring_trend()
             self._tenure()
+            ############################################################
             self.commute()
             self._about_us()
+            ############################################################
             self.update_doc({'_id':d['_id']}, False)
             loop.report()
 
@@ -930,48 +992,11 @@ class DataValueCleaner:
     p_num_str_mix = re.compile('(\d+[./,]*\d*)\s*([a-zA-Z]+)')
     p_extract_just_num = re.compile('\d+[./,]*\d*')
     p_purify_num = re.compile('[\d,\.]+')
-    p_ratio_str = re.compile('([\.\d+]+)\s*(\%)\s*(.*)')
+    p_percent = re.compile('([\.\d+]+)\s*(\%)\s*(.*)')
 
     p_total_employees = re.compile('([0-9,]+)\s*(Total employee[s]*)', flags=re.I)
     p_applicant_location_cnt = re.compile('(\d+\W\d+|\d+)\s*(applicant[s]*)')
     ############################################################Top-Card
-    def posted_time_ago(self, v, regex):
-        if isinstance(v, str) and len(v) > 0:
-            v = v.strip()
-            m = regex.search(string=v)
-            if m is None:
-                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m is None.\n posted_time_ago : {v}")
-            else:
-                num = int(m.groups()[1])
-                if 'second' in v:
-                    tdelta = timedelta(seconds=num)
-                elif 'minute' in v:
-                    tdelta = timedelta(minutes=num)
-                elif 'hour' in v:
-                    tdelta = timedelta(hours=num)
-                elif 'day' in v:
-                    tdelta = timedelta(days=num)
-                elif 'week' in v:
-                    tdelta = timedelta(weeks=num)
-                elif 'month' in v:
-                    tdelta = timedelta(days=num*30.5)
-                elif 'year' in v:
-                    tdelta = timedelta(days=num*365)
-                else:
-                    print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 이런 경우는 발생할 수 없다.\n posted_time_ago : {v}")
-        else:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n isinstance(v, str) and len(v) > 0 is False.\n posted_time_ago : {v}")
-        return tdelta
-
-    def views(self, v, regex):
-        m = regex.search(string=v)
-        if m is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m is None.")
-        else:
-            v = m.groups()
-            # print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m.group() : {v}")
-            v = self._purify_number(v[0])
-        return v
     ############################################################Common-functions
     def _clean_num_str_mix(self, v):
         m = self.p_num_str_mix.search(string=v)
@@ -982,7 +1007,7 @@ class DataValueCleaner:
             # print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m.groups() : {v}")
         return v[0]
 
-    def _purify_number(self, v):
+    def purify_number(self, v):
         try:
             m = self.p_purify_num.search(string=v)
         except Exception as e:
@@ -997,26 +1022,13 @@ class DataValueCleaner:
         finally:
             return v
 
-    def skills_match_ratio(self, v):
-        v = self._clean_num_str_mix(v)
-        return v
-
-    def n_applicants(self, v):
-        v = self._clean_num_str_mix(v)
-        v = self._purify_number(v)
-        return int(v)
-
-    def n_employees(self, v):
-        v = self._purify_number(v)
-        return v
-
     def connection_cnt(self, v):
         v = self._clean_num_str_mix(v)
-        v = self._purify_number(v)
+        v = self.purify_number(v)
         return int(v)
     ############################################################Competitive_intelligence_about_applicants
     def applicants_integer(self, v):
-        v = self._purify_number(v)
+        v = self.purify_number(v)
         return int(v)
 
     def applicant_location_cnt(self, v):
@@ -1029,24 +1041,12 @@ class DataValueCleaner:
             v = v[0]
         return v
     ############################################################Premium-Services
-    def total_employees(self, v):
-        m = self.p_total_employees.search(string=v)
-        if m is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m is None.\n v : {v}")
-        else:
-            v = m.groups()
-            # print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m.groups() : {v}")
-            v = self._purify_number(v[0])
-            v = int(v)
-        return v
-
-    def growth(self, v):
-        m = self.p_ratio_str.search(string=v)
+    def percent_str(self, v):
+        m = self.p_percent.search(string=v)
         if m is None:
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m is None.")
         else:
             g = m.groups()
-            # print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m.groups() : {g}")
             v = int(g[0]) / 100
             if 'decre' in g[2]:
                 v *= -1
@@ -1054,7 +1054,7 @@ class DataValueCleaner:
 
     def tenure(self, v):
         v = self._clean_num_str_mix(v)
-        v = self._purify_number(v)
+        v = self.purify_number(v)
         return float(v)
 
 #============================================================
@@ -1207,14 +1207,27 @@ class DocDataParser(models.LinkedInJobPosting):
             numdf[col] = numdf[col].apply(lambda x: x if x is np.nan else int(x))
         return numdf
 
+def prepare_data():
+    """collect 완료 후,"""
+    dup = Deduplicator(phase=1)
+    dup.load_targets().inspect_dup_df()
+    dup.delete_dup_data()
+    parse()
+    dup = Deduplicator(phase=2)
+    dup.load_targets().inspect_dup_df()
+    dup.delete_dup_data()
+
 #============================================================
 """Analyzer."""
 #============================================================
 
 class Analyzer(models.LinkedInJobPosting):
 
+    filter = {'html':{'$ne':None}}
+
     def __init__(self):
         super().__init__()
+        self.schema = self.analyze_cols
 
     def listcol_valfreq_df(self, col, search_location=None):
         if col in self.listtype_cols:
@@ -1222,12 +1235,12 @@ class Analyzer(models.LinkedInJobPosting):
             if search_location is not None:
                 filter.update({'search_location':{'$regex':search_location,'$options':'i'}})
             self.cursor = self.tbl.find(filter, projection={'_id':1, col:1})
-            self.load()
+            self.load(True)
             jndf = json_normalize(self.docs, col).rename(columns={0:col})
             jndf['freq'] = 1
             return jndf.groupby(col).count().sort_values(by='freq', ascending=False)
         else:
-            print(f"입력한 컬럼({col})은 'self.listtype_cols'에 정의되어 있지 않다.")
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n입력한 컬럼({col})은 'self.listtype_cols'에 정의되어 있지 않다.")
 
     def deindex(self, df):
         _df = df.copy()
@@ -1305,7 +1318,17 @@ class SkillAnalyzer(Analyzer):
         self.plt = plt
         plt.show()
 
-
+    def compare_with_my_skills(self, freqdf):
+        myskilldf = pd.read_csv(f"{DATA_PATH}/myskills.csv")
+        myskills = list(myskilldf.skill)
+        TF = freqdf.index.isin(myskills)
+        comparedf = freqdf[TF]
+        comparedf['myskill'] = comparedf.index
+        comparedf.index = range(len(comparedf))
+        comparedf = comparedf.rename(columns={
+            'matchskill':'required_skill', 'applicantskill':'applicants_skill'
+        }).reindex(columns=['myskill','required_skill','applicants_skill'])
+        return comparedf
 
 #============================================================
 """Handler."""
@@ -1314,46 +1337,88 @@ class SkillAnalyzer(Analyzer):
 """테이블 중복제거."""
 class Deduplicator(models.LinkedInJobPosting):
 
-    input_consts = ['search_keyword','search_location']
-    input_vars = ['collect_dt']
-    output_consts = ['title','companyname','location']
-    output_vars = ['posted_time_ago']
-    subset = input_consts + input_vars + output_consts + output_vars
-    cols_order = input_consts + output_consts + input_vars + output_vars + ['_id']
-    """최근 수집-파싱을 분리한 데이터에 대해."""
-    # filter = {'html':{'$ne':None}, 'desc':{'$ne':None}}
-    """예전 html 없는 데이터에 대해."""
-    filter = {'desc':{'$ne':None}}
-    projection = {col:1 for col in subset}
+    def __init__(self, phase):
+        super().__init__()
+        input_consts = ['search_keyword','search_location']
+        input_vars = ['collect_dt']
+        output_consts = ['title','companyname','location']
+        output_vars = ['posted_time_ago']
+        self.phase = phase
+        if phase is 1:
+            self.cols_order = input_consts + output_consts + input_vars + output_vars + ['_id']
+            """예전 html 없는 데이터에 대해."""
+            self.filter = {'desc':{'$ne':None}}
+            """최근 수집-파싱을 분리한 데이터에 대해."""
+            self.filter = {'html':{'$ne':None}, 'desc':{'$ne':None}}
+            self.subset = input_consts + input_vars + output_consts + output_vars
+            self.projection = {col:1 for col in self.subset}
+        else:
+            """2차 중복제거 시."""
+            self.cols_order = input_consts + output_consts + ['posted_dt'] + ['_id']
+            self.filter = {'posted_dt':{'$ne':None}}
+            self.subset = input_consts + output_consts + ['posted_dt']
+            self.projection = {col:1 for col in self.subset}
 
     def load_targets(self):
         self.cursor = self.tbl.find(self.filter, self.projection)
-        self.load()
-        print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(docs) : {len(self.docs)}")
-        return self
+        return self.load(True)
 
-    def normalize_collect_dt(self, df):
+    def _normalize_collect_dt(self, df):
         df = df.dropna(axis=0, how='any', thresh=None, subset=['collect_dt'])
         df.collect_dt = df.collect_dt.apply(lambda x: datetime(x.year, x.month, x.day, x.hour))
         return df
 
-    def get_dup_df(self, keep):
+    def _get_dup_df(self, keep):
         if hasattr(self,'docs'):
-            df = self.get_df().sort_values(by=self.cols_order)
-            df = self.normalize_collect_dt(df)
+            df = self.get_df().sort_values(by=self.cols_order).reindex(columns=self.cols_order)
+            if self.phase is 1:
+                df = self._normalize_collect_dt(df)
             TF = df.duplicated(subset=self.subset, keep=keep)
-            print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(df[TF]) : {len(df[TF])}")
+            print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n df.duplicated len : {len(df[TF])}")
             return df[TF]
         else:
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n if hasattr(self,'docs') is False.")
 
-    def review_dup_df(self):
-        df = self.get_dup_df(keep=False)
-        if len(df) is not 0:
-            return df.sort_values(by=self.cols_order).reindex(columns=self.cols_order)
+    def inspect_dup_df(self):
+        """
+        False : Mark all duplicates as True.
+        first : Mark duplicates as True except for the first occurrence.
+        last : Mark duplicates as True except for the last occurrence.
+        """
+        df1 = self._get_dup_df(keep=False)
+        df2 = self._get_dup_df(keep='first')
+        if len(df2) is not 0:
+            self.deleting_ids = list(df2._id)
+        print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n dup_df(keep=False) len : {len(df1)}\n dup_df(keep='first') len : {len(df2)}")
+        return df1, df2
 
     def delete_dup_data(self):
-        df = self.get_dup_df(keep='first')
-        if len(df) is not 0:
-            self.DeleteResult = self.tbl.delete_many({'_id':{'$in':list(df._id)}})
-            print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n DeleteResult : {self.DeleteResult}")
+        if hasattr(self, 'deleting_ids'):
+            self.delete_many_result(filter={'_id':{'$in':self.deleting_ids}}, report=True)
+
+    def report_status_after_1st_dedup(self):
+        print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}")
+        ############################################################
+        ids = self.tbl.distinct('_id', {'html':{'$ne':None}})
+        print(" tbl.distinct('_id', {'html':{'$ne':None}})")
+        print(f" len(ids) : {len(ids)}")
+        ############################################################
+        ids = self.tbl.distinct('_id', {'html':None})
+        print(" tbl.distinct('_id', {'html':None})")
+        print(f" len(ids) : {len(ids)}")
+        ############################################################
+        ids = self.tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':{'$ne':None}})
+        print(" tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':{'$ne':None}})")
+        print(f" len(ids) : {len(ids)}")
+        ############################################################
+        ids = self.tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':None})
+        print(" tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':None})")
+        print(f" len(ids) : {len(ids)}")
+        ############################################################
+        ids = self.tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':{'$ne':None}, 'posted_dt':{'$ne':None}})
+        print(" tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':{'$ne':None}, 'posted_dt':{'$ne':None}})")
+        print(f" len(ids) : {len(ids)}")
+        ############################################################
+        ids = self.tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':{'$ne':None}, 'posted_dt':None})
+        print(" tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':{'$ne':None}, 'posted_dt':None})")
+        print(f" len(ids) : {len(ids)}")
