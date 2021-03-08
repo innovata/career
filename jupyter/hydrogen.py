@@ -1,17 +1,17 @@
 
 #============================================================
-"""경로잡기, 자주사용하는 개발용 모듈."""
+"""개발환경(IDE) 셋업 | 경로잡기, 자주사용하는 개발용 모듈."""
 #============================================================
 
+from career import PJT_PATH
 import sys
-sys.path.append("/Users/sambong/pjts/career/env/lib/python3.7/site-packages")
-sys.path.append('/Users/sambong/libs/idebug')
-sys.path.append('/Users/sambong/libs/ilib')
-other_pjts = ['stock']
-for other in other_pjts:
-    path = f"/Users/sambong/pjts/{other}/env/lib/python3.7/site-packages"
-    if path in sys.path:
-        sys.path.remove(path)
-import pprint
-pp = pprint.PrettyPrinter(indent=2)
+sys.path.append(f"{PJT_PATH}/env/lib/python3.7/site-packages")
+from career.ide import *
 import importlib
+
+# %env USERID=innovata@naver.com
+# %env PW=abc54321
+# %env USERID=iinnovata@gmail.com
+# %env PW=5272Dkgkgk
+# export USERID=innovata@naver.com
+# export PW=abc54321

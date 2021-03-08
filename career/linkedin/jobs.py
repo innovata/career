@@ -17,15 +17,20 @@ from collections import Counter
 import pandas as pd
 from pandas.io.json import json_normalize
 import numpy as np
+import matplotlib.pyplot as plt
 #============================================================ Ecetera
 import requests
 from requests.auth import HTTPBasicAuth
 from bs4 import BeautifulSoup
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 #============================================================ Project
-from career import models
+from career import models, PJT_PATH
 from career.iiterator import FunctionIterator
+from career import selenium as sln
+DATA_PATH = f"{PJT_PATH}/career/data/linkedin/jobs"
 #============================================================ Libs
 import sys
 sys.path.append('/Users/sambong/libs/idebug')
@@ -42,230 +47,230 @@ LinkedIn 에서 25개 이상의 JobCards를 페이지 네비게이션 방식에�
 """
 #============================================================
 
-def selenium_clicker(webelem):
-    time.sleep(1)
-    try:
-        webelem.click()
-    except Exception as e:
-        print(f"{'#'*60}\n{os.path.abspath(__file__)} | {inspect.stack()[0][3]}\n Exception : {e}")
-    else:
-        return True
+class LinkedInDefender:
+
+    p_login_url = re.compile('https://www\.linkedin\.com/login/')
+    p_robot_url = re.compile('https://www\.linkedin\.com/checkpoint/')
+
+    def __init__(self):
+        print(f"{'='*60}\n LinkedInDefender.__init__() Starts.")
+        super().__init__()
+        print(f"{'='*60}\n LinkedInDefender.__init__() Ends.")
+
+    def if_LinkedIn_is_pranking(self):
+        if re.search(pattern=self.base_url, string=self.driver.current_url) is None:
+            ############################################################ CASE.1
+            if self.p_login_url.search(string=self.driver.current_url) is not None:
+                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 링크드인이 장난질 치고 있는데, 강제 로그아웃시켰으므로 재로그인.")
+                self.driver.find_element(By.ID, 'username').clear()
+                self.driver.find_element(By.ID, 'username').send_keys(self.userid)
+                self.driver.find_element(By.ID, 'password').clear()
+                self.driver.find_element(By.ID, 'password').send_keys(self.pw)
+                self.driver.find_element(By.CLASS_NAME, "login__form_action_container").find_element(By.TAG_NAME, "button").click()
+            else:
+                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 링크드인이 장난질 치고 있으므로, 검색 페이지로 회귀 후 5초간 기다리기.")
+                self.driver.back()
+                time.sleep(5)
+            ############################################################ CASE.2
+            if self.p_robot_url.search(string=self.driver.current_url) is not None:
+                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n '로봇이 아닙니다' 검증페이지로 이동할 경우, 프로그렘 정지.")
+            return True
+        else:
+            return False
 
 class SearchCondition:
     """검색조건 설정."""
     keywords_writing_secs = 3
-    searchbutton_click_secs = 1
 
     def __init__(self):
-        print(f"{'='*60}\n SearchCondition.__init__()")
+        print(f"{'='*60}\n SearchCondition.__init__() Starts.")
         super().__init__()
+        print(f"{'='*60}\n SearchCondition.__init__() Ends.")
 
-    def put_searching_keyword(self, keyword='Data Analytics', location='Spain'):
+    def _detect_nav_search_bar(self, error_cnt=0):
         try:
-            search_form = self.driver.find_element_by_id('nav-typeahead-wormhole')
+            search_form = self.driver.find_element(By.ID, 'nav-typeahead-wormhole')
         except Exception as e:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n e : {e}")
-            self.put_searching_keyword(keyword, location)
+            error_cnt += 1
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n e : {e}\n error_cnt : {error_cnt}")
+            if error_cnt < 5:
+                time.sleep(2)
+                self.detect_nav_search_bar(error_cnt)
+            else:
+                return False
         else:
-            keyword_box = search_form.find_element_by_xpath("//div[contains(@class, 'jobs-search-box__input--keyword')]")
-            location_box = search_form.find_element_by_xpath("//div[contains(@class, 'jobs-search-box__input--location')]")
-            search_button = search_form.find_element_by_xpath("//button[contains(@class, 'jobs-search-box__submit-button')]")
+            self.keyword_box = search_form.find_element(By.XPATH, "//div[contains(@class, 'jobs-search-box__input--keyword')]")
+            self.location_box = search_form.find_element(By.XPATH, "//div[contains(@class, 'jobs-search-box__input--location')]")
+            self.search_button = search_form.find_element(By.XPATH, "//button[contains(@class, 'jobs-search-box__submit-button')]")
+            return True
 
-            keyword_box = keyword_box.find_element_by_tag_name('artdeco-typeahead-deprecated').find_elements_by_tag_name('input')[1]
+    def put_search_keyword(self, keyword='Data Analytics'):
+        if self._detect_nav_search_bar():
+            keyword_box = self.keyword_box.find_element(By.TAG_NAME, 'artdeco-typeahead-deprecated').find_elements(By.TAG_NAME, 'input')[1]
             keyword_box.clear()
             print(f" 검색 키워드 입력시간 {self.keywords_writing_secs}초 설정.")
             time.sleep(self.keywords_writing_secs)
             keyword_box.send_keys(keyword)
+            self.search_keyword = keyword
+        return self
 
-            location_box = location_box.find_element_by_tag_name('artdeco-typeahead-deprecated').find_elements_by_tag_name('input')[1]
+    def put_search_location(self, location='Spain'):
+        if self._detect_nav_search_bar():
+            location_box = self.location_box.find_element(By.TAG_NAME, 'artdeco-typeahead-deprecated').find_elements(By.TAG_NAME, 'input')[1]
             location_box.clear()
             print(f" 지역명 입력시간 {self.keywords_writing_secs}초 설정.")
             time.sleep(self.keywords_writing_secs)
             location_box.send_keys(location)
+            self.search_location = location
+        return self
 
-            selenium_clicker(search_button)
-            return self
+    def click_search_button(self):
+        if hasattr(self, 'search_button'):
+            sln.clicker(webelem=self.search_button, secs=2)
+        return self
 
-    def choose_date_posted(self, duration=0):
+    def choose_date_posted(self, duration=0, error_cnt=0):
         """
-        past24hours = duration : [0]
-        past_week = duration : [1]
-        past_month = duration : [2]
-        anytime = duration : [3]
+        duration=0 : past24hours
+        duration=1 : past_week
+        duration=2 : past_month
+        duration=3 : anytime
         """
-        time.sleep(2)
         try:
-            filterbar_section = self.driver.find_element_by_xpath('//header[contains(@class, "search-filters-bar--jobs-search")]')
+            filterbar_section = self.driver.find_element(By.XPATH, '//header[contains(@class, "search-filters-bar--jobs-search")]')
         except Exception as e:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
-            self.choose_date_posted(duration)
+            error_cnt += 1
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}\n error_cnt : {error_cnt}")
+            if error_cnt < 5:
+                time.sleep(1)
+                self.choose_date_posted(duration)
+            else:
+                pass
         else:
-            date_filter = filterbar_section.find_element_by_xpath("//button[contains(@aria-label, 'Date Posted filter')]")
+            date_filter = filterbar_section.find_element(By.XPATH, "//button[contains(@aria-label, 'Date Posted filter')]")
             # 드롭-다운 선택지 불러오기.
-            selenium_clicker(webelem=date_filter.find_element_by_tag_name('li-icon'))
-            facets = filterbar_section.find_element_by_id("date-posted-facet-values")
-            values = facets.find_elements_by_tag_name('li')
+            sln.clicker(webelem=date_filter.find_element(By.TAG_NAME, 'li-icon'))
+            facets = filterbar_section.find_element(By.ID, "date-posted-facet-values")
+            values = facets.find_elements(By.TAG_NAME, 'li')
             # 기간 선택.
-            selenium_clicker(webelem=values[duration].find_element_by_tag_name('label'))
+            sln.clicker(webelem=values[duration].find_element(By.TAG_NAME, 'label'), secs=1)
             # 필터 적용.
-            selenium_clicker(webelem=facets.find_element_by_xpath("//button[contains(@data-control-name, 'filter_pill_apply')]"))
+            sln.clicker(webelem=facets.find_element(By.XPATH, "//button[contains(@data-control-name, 'filter_pill_apply')]"), secs=3)
+        finally:
             return self
 
     def choose_sort_by(self, sort='date'):
+        time.sleep(1)
         try:
-            sort_section = self.driver.find_element_by_id('sort-by-select')
+            sort_section = self.driver.find_element(By.ID, 'sort-by-select')
         except Exception as e:
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
-            self.choose_sort_by(sort)
+            if hasattr(self, 'sort_value'): delattr(self, 'sort_value')
         else:
-            sort_button = sort_section.find_element_by_id("sort-by-select-trigger")
-            sort_option = sort_section.find_element_by_id('sort-by-select-options')
-            cur_sort_value = sort_button.find_element_by_tag_name('p').text
+            sort_button = sort_section.find_element(By.ID, "sort-by-select-trigger")
+            sort_option = sort_section.find_element(By.ID, 'sort-by-select-options')
+            cur_sort_value = sort_button.find_element(By.TAG_NAME, 'p').text
             if sort not in cur_sort_value:
                 # 옵션 선택 팝업 클릭.
-                selenium_clicker(webelem=sort_button.find_element_by_tag_name('p'))
+                sln.clicker(webelem=sort_button.find_element(By.TAG_NAME, 'p'))
                 # 최종 옵션 선택 및 적용.
                 class_pat = f"jobs-search-dropdown__option-button--{sort}"
                 xpath = f"//button[contains(@class, '{class_pat}')]"
-                selenium_clicker(webelem=sort_option.find_element_by_xpath(xpath))
+                sln.clicker(webelem=sort_option.find_element(By.XPATH, xpath), secs=2)
+            self.sort_value = sort
+        finally:
             return self
 
-    def extract_keyword_location(self):
-        uo = urlparse(self.driver.current_url)
-        qs = parse_qs(uo.query)
-        self.search_keyword = qs['keywords'][0]
-        self.search_location = qs['location'][0]
+class JobDetails:
 
-class JobDetails(models.LinkedInJobPosting):
-
-    scroll_to_see_more_secs = 3
-    job_description_reading_secs = 10
-    scroll_to_next_block_secs = 2
-    job_details_human_reading_secs = 10
-    job_details_ajax_waiting_secs = 3
+    job_details_human_reading_secs = 5
 
     def __init__(self):
-        print(f"{'='*60}\n JobDetails.__init__()")
+        print(f"{'='*60}\n JobDetails.__init__() Starts.")
         super().__init__()
+        print(f"{'='*60}\n JobDetails.__init__() Ends.")
+        self.schema = self.collect_cols
 
     def detect_job_details(self):
-        rightpanel_container = self.driver.find_elements_by_class_name('jobs-search-two-pane__details')
-        if len(rightpanel_container) is 1:
-            content_container = self.driver.find_elements_by_class_name('jobs-details__main-content')
-            if len(content_container) is 1:
-                print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Right-panel exists.\n")
-                return True
-            else:
-                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(content_container) is not 1.\n")
-                return False
-        else:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(rightpanel_container) is not 1.\n")
+        try:
+            self.driver.find_element(By.CLASS_NAME, 'jobs-details__main-content')
+        except Exception as e:
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
             return False
+        else:
+            print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Right-panel exists.\n")
+            return True
 
     def click_job_description_see_more(self):
-        print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n scroll_to_see_more_secs : {self.scroll_to_see_more_secs}")
-        time.sleep(self.scroll_to_see_more_secs)
         try:
-            job_description = self.driver.find_element_by_class_name('jobs-description')
+            job_description = self.driver.find_element(By.CLASS_NAME, 'jobs-description')
         except Exception as e:
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
         else:
             try:
-                see_more_btn = job_description.find_element_by_class_name('artdeco-button')
+                see_more_btn = job_description.find_element(By.CLASS_NAME, 'artdeco-button')
             except Exception as e:
                 print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
             else:
                 ActionChains(self.driver).move_to_element(see_more_btn).perform()
-                selenium_clicker(see_more_btn)
-                # print(f"\n.\n.\n.\n {self.job_description_reading_secs}초 동안 job-description 읽는 척.\n.\n.\n.")
-                # time.sleep(self.job_description_reading_secs)
+                sln.clicker(webelem=see_more_btn, secs=1)
 
-    def moveto_applicant_insights_send_feedback(self):
-        print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n scroll_to_next_block_secs : {self.scroll_to_next_block_secs}")
-        time.sleep(self.scroll_to_next_block_secs)
+    def scrollto_applicant_insights_send_feedback(self):
         try:
-            applicant_insights = self.driver.find_element_by_class_name('jobs-premium-applicant-insights')
+            applicant_insights = self.driver.find_element(By.CLASS_NAME, 'jobs-premium-applicant-insights')
         except Exception as e:
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
         else:
             try:
-                send_feedback = applicant_insights.find_element_by_class_name('display-flex')
+                send_feedback = applicant_insights.find_element(By.CLASS_NAME, 'display-flex')
             except Exception as e:
                 print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
             else:
                 ActionChains(self.driver).move_to_element(send_feedback).perform()
+                sln.time_sleeper(secs=1)
 
-    def moveto_applicant_insights_send_feedback_v1(self):
-        time.sleep(self.scroll_to_next_block_secs)
-        applicant_insights = self.driver.find_elements_by_class_name('jobs-premium-applicant-insights')
-        if len(applicant_insights) is 1:
-            send_feedback = applicant_insights[0].find_elements_by_class_name('display-flex')
-            if len(send_feedback) is 1:
-                ActionChains(self.driver).move_to_element(send_feedback[0]).perform()
-            else:
-                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(send_feedback) is not 1.")
-        else:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(applicant_insights) is not 1.")
-
-    def moveto_company_insights_more_company(self):
-        print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n scroll_to_next_block_secs : {self.scroll_to_next_block_secs}")
-        time.sleep(self.scroll_to_next_block_secs)
+    def scrollto_company_insights_more_company(self):
         try:
-            company_insights = self.driver.find_element_by_class_name('jobs-premium-company-insights')
+            company_insights = self.driver.find_element(By.CLASS_NAME, 'jobs-premium-company-insights')
         except Exception as e:
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
         else:
             try:
-                more_company = company_insights.find_element_by_xpath("//a[contains(@data-control-name, 'see_more_company_link')]")
+                more_company = company_insights.find_element(By.XPATH, "//a[contains(@data-control-name, 'see_more_company_link')]")
             except Exception as e:
                 print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
             else:
                 ActionChains(self.driver).move_to_element(more_company).perform()
+                sln.time_sleeper(secs=1)
 
-    def moveto_commute(self):
-        print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n scroll_to_next_block_secs : {self.scroll_to_next_block_secs}")
-        time.sleep(self.scroll_to_next_block_secs)
+    def scrollto_commute(self):
         try:
-            commute_div = self.driver.find_element_by_id('commute-module')
+            commute_div = self.driver.find_element(By.ID, 'commute-module')
         except Exception as e:
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
         else:
             ActionChains(self.driver).move_to_element(commute_div).perform()
+            sln.time_sleeper(secs=1)
 
     def click_about_us_see_more(self):
-        print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n scroll_to_next_block_secs : {self.scroll_to_next_block_secs}")
-        time.sleep(self.scroll_to_next_block_secs)
         try:
-            article_tag = self.driver.find_element_by_class_name('jobs-company__toggle-to-link')
+            aboutus = self.driver.find_element(By.XPATH, '//div[contains(@class, "jobs-company") and contains(@class, "jobs-company--is-truncated")]')
         except Exception as e:
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
         else:
+            ActionChains(self.driver).move_to_element(aboutus).perform()
+            sln.time_sleeper(secs=1)
             try:
-                button = article_tag.find_element_by_tag_name('button')
+                seemore = aboutus.find_element(By.CLASS_NAME, 'jobs-company__toggle-to-link')
             except Exception as e:
                 print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
             else:
+                button = seemore.find_element(By.TAG_NAME, 'button')
                 ActionChains(self.driver).move_to_element(button).perform()
-                selenium_clicker(webelem=button)
+                sln.clicker(webelem=button)
 
-    def debug_re_search(self):
-        print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n job_details_ajax_waiting_secs : {self.job_details_ajax_waiting_secs}")
-        time.sleep(self.job_details_ajax_waiting_secs)
-        print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}")
-        html = self.driver.page_source
-
-        m = re.search('jobs-premium-applicant-insights\s*',string=html)
-        print(f"{'-'*60}\n jobs-premium-applicant-insights\s* re.search :\n {m}")
-
-        m = re.search('jobs-premium-company-insights\s*',string=html)
-        print(f"{'-'*60}\n jobs-premium-company-insights\s* re.search :\n {m}")
-
-        m = re.search('jobs-company__card\s*',string=html)
-        print(f"{'-'*60}\n jobs-company__card\s* re.search :\n {m}")
-
-    def save_job_details(self):
-        if hasattr(self,'search_keyword') and hasattr(self,'search_location') and hasattr(self,'companyname') and hasattr(self,'title'):
-            self.html = self.driver.page_source
+    def upsert_html(self):
+        try:
             filter = {
                 'search_keyword':self.search_keyword,
                 'search_location':self.search_location,
@@ -273,203 +278,195 @@ class JobDetails(models.LinkedInJobPosting):
                 'companyname':self.companyname,
                 'title':self.title,
             }
-            print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n list(self.schematize().doc) : {list(self.schematize().doc)}.")
-            self.insert_doc()
-        else:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 중요한 키값을 가지고 있지 않기 때문에 저장하지 않는다.\n")
-        return self
-
-    def collect_job_details(self):
-        if self.detect_job_details():
-            self.click_job_description_see_more()
-            self.moveto_applicant_insights_send_feedback()
-            self.moveto_company_insights_more_company()
-            self.moveto_commute()
-            self.click_about_us_see_more()
-            self.debug_re_search()
-            print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}")
-            print(f"\n.\n.\n.\n {self.job_details_human_reading_secs}초 동안 job-details 읽는 척.\n.\n.\n.")
-            time.sleep(self.job_details_human_reading_secs)
-            self.save_job_details()
-        else:
-            pass
-
-class JobCards(JobDetails):
-
-    def __init__(self):
-        print(f"{'='*60}\n JobCards.__init__()")
-        super().__init__()
-
-    def detect_jobcards(self):
-        try:
-            jobcard_ul = self.driver.find_element_by_class_name('jobs-search-results__list')
         except Exception as e:
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
-            return False
         else:
-            print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Job-cards exist.")
-            self.jobcards = jobcard_ul.find_elements_by_class_name('artdeco-list__item')
-            return True
-
-    def find_active_jobcard(self):
-        if hasattr(self,'jobcards'):
-            for i, jobcard in enumerate(self.jobcards):
-                if True:
-                    try: jobcard.find_element_by_class_name('job-card-search--is-active')
-                    except Exception as e: pass
-                    else:
-                        self.active_jobcard_num = i
-                        self.active_jobcard = self.jobcards[i]
-                        break
-                else:
-                    actives = jobcard.find_elements_by_class_name('job-card-search--is-active')
-                    if len(actives) is 1:
-                        self.active_jobcard_num = i
-                        self.active_jobcard = self.jobcards[i]
-                        break
-            if hasattr(self,'active_jobcard_num') is False:
-                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Active-Jobcard 가 존재하지 않는 말도 안되는 상황.")
-        else:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n hasattr(self,'jobcards') is False.")
+            print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n filter :")
+            pp.pprint(filter)
+            self.html = self.driver.page_source
+            self.update_doc(filter, upsert=True)
         return self
 
-    def click_next_jobcard(self):
-        self.find_active_jobcard()
-        if hasattr(self,'active_jobcard_num'):
-            if len(self.jobcards) is (self.active_jobcard_num+1):
+    def wait_humanlike_reading_secs(self):
+        print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n{self.job_details_human_reading_secs}초 동안 job-details 읽는 척.")
+        sln.time_sleeper(self.job_details_human_reading_secs)
+
+    def act_in_job_details(self):
+        if self.detect_job_details():
+            """Scroll-upto-bottom | Start."""
+            self.click_job_description_see_more()
+            self.scrollto_applicant_insights_send_feedback()
+            self.scrollto_company_insights_more_company()
+            self.scrollto_commute()
+            self.click_about_us_see_more()
+            """Scroll-upto-bottom | End."""
+            self.wait_humanlike_reading_secs()
+            self.upsert_html()
+
+class JobCards(LinkedInDefender):
+
+    p_active_jobcard = re.compile('job-card-search--is-active')
+    jobcards_xpath = '//div[contains(@data-control-name, "A_jobssearch_job_result_click") and contains(@class, "job-card-search--clickable") and contains(@role, "button")]'
+
+    def __init__(self):
+        print(f"{'='*60}\n JobCards.__init__() Starts.")
+        super().__init__()
+        print(f"{'='*60}\n JobCards.__init__() Ends.")
+
+    def _inspect_jobcards(self):
+        self.jobcards = self.driver.find_elements(By.XPATH, self.jobcards_xpath)
+        if len(self.jobcards) is 0:
+            self.jobcards_iterable = False
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(self.jobcards) is 0.")
+        else:
+            ############################################################
+            for i, jobcard in enumerate(self.jobcards, start=0):
+                class_str = jobcard.get_attribute('class')
+                m = self.p_active_jobcard.search(string=class_str)
+                if m is not None:
+                    self.active_jobcard_seq = i
+                    print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Active Jobcard is {self.active_jobcard_seq+1}.")
+                    break
+            ############################################################
+            self.jobcards_len = len(self.jobcards)
+            if self.active_jobcard_seq == self.jobcards_len -1:
                 self.jobcards_iterable = False
-                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Current active jobcard({self.active_jobcard_num+1}) is the last one. Stop iteration.")
+                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Active Jobcard ({self.active_jobcard_seq+1}) is the last. Stop iteration.")
             else:
                 self.jobcards_iterable = True
-                next_jobcard = self.jobcards[self.active_jobcard_num+1]
-                selenium_clicker(next_jobcard)
-                print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n JobCard-Number {self.active_jobcard_num+1} 클릭.")
+
+    def next_jobcard(self, step=1):
+        self._inspect_jobcards()
+        if self.jobcards_iterable:
+            try:
+                next_jobcard = self.jobcards[self.active_jobcard_seq + step]
+            except Exception as e:
+                self.jobcards_iterable = False
+                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
+            else:
+                print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Next Jobcard({self.active_jobcard_seq+1 + step}) 클릭.")
+                sln.time_sleeper(secs=1)
+                ActionChains(self.driver).move_to_element(next_jobcard).perform()
+                sln.clicker(webelem=next_jobcard, secs=2)
         else:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n hasattr(self,'active_jobcard_num') is False.")
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n jobcards_iterable is False.")
 
     def parse_active_jobcard(self):
-        active_jobcard = self.driver.find_elements_by_class_name('job-card-search--is-active')
-        if len(active_jobcard) is 1:
-            jobcard = active_jobcard[0].find_elements_by_class_name('job-card-search__content-wrapper')
-            if len(jobcard) is 1:
-                print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}")
-                job_title = jobcard[0].find_elements_by_class_name('job-card-search__title')
-                if len(job_title) is 1:
-                    self.title = job_title[0].text
-                    print(f" title : {self.title}")
-                else:
-                    print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(job_title) is not 1.\n")
-
-                companyname = jobcard[0].find_elements_by_class_name('job-card-search__company-name')
-                if len(companyname) is 1:
-                    self.companyname = companyname[0].text
-                    print(f" companyname : {self.companyname}")
-                else:
-                    print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(companyname) is not 1.\n")
-
-                location = jobcard[0].find_elements_by_class_name('job-card-search__location')
-                if len(location) is 1:
-                    self.location = location[0].text
-                else:
-                    print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(location) is not 1.\n")
-            else:
-                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(jobcard) is not 1.\n")
+        try:
+            active_jobcard = self.driver.find_element(By.XPATH, '//div[contains(@data-control-name, "A_jobssearch_job_result_click") and contains(@class, "job-card-search--is-active")]')
+            # active_jobcard = self.driver.find_element(By.CLASS_NAME, 'job-card-search--is-active')
+        except Exception as e:
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
         else:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 이런 경우는 절대 발생할 수 없다.\n")
+            try:
+                jobcard = active_jobcard.find_element(By.CLASS_NAME, 'job-card-search__content-wrapper')
+            except Exception as e:
+                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
+            else:
+                print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}")
+                ############################################################
+                try:
+                    title = jobcard.find_element(By.CLASS_NAME, 'job-card-search__title')
+                except Exception as e:
+                    print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
+                else:
+                    self.title = title.text.strip()
+                    print(f" job-title : {self.title}")
+                ############################################################
+                try:
+                    companyname = jobcard.find_element(By.CLASS_NAME, 'job-card-search__company-name')
+                except Exception as e:
+                    print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
+                else:
+                    self.companyname = companyname.text.strip()
+                    print(f" companyname : {self.companyname}")
+                ############################################################
+                try:
+                    location = jobcard.find_element(By.CLASS_NAME, 'job-card-search__location')
+                except Exception as e:
+                    print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
+                else:
+                    self.location = location.text.strip()
+                    print(f" job-location : {self.location}")
 
     def iter_jobcards(self):
-        if hasattr(self,'collect_dt') and hasattr(self,'search_keyword') and hasattr(self,'search_location'):
-            self.jobcards_iterable = True
-            while self.jobcards_iterable:
-                self.if_stay_in_job_search_page()
-                if self.detect_jobcards():
-                    self.find_active_jobcard().parse_active_jobcard()
-                    self.collect_job_details()
-                    # time.sleep(5)
-                    self.find_active_jobcard().click_next_jobcard()
-        else:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n hasattr(self,'search_keyword') and hasattr(self,'search_location') is False.")
+        self.jobcards_iterable = True
+        while self.jobcards_iterable:
+            ############################################################
+            if self.if_LinkedIn_is_pranking():
+                self.scrollto_last_jobcard().next_jobcard(step=2)
+            ############################################################
+            self.parse_active_jobcard()
+            self.next_jobcard()
 
-class Pagination(JobCards):
+    def scrollto_last_jobcard(self):
+        jobcards_ul = self.driver.find_element(By.CLASS_NAME, 'jobs-search-results__list')
+        jobcard_li = jobcards_ul.find_elements(By.TAG_NAME, 'li')
+        print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 링크드인의 장난질에 대한 대응. Jobcards 목록 끝까지 이동 중...")
+        for i, jobcard in enumerate(jobcard_li):
+            print(f" {i}번째 Jobcard.")
+            ActionChains(self.driver).move_to_element(jobcard).perform()
+        return self
 
-    scroll_to_pagination = 1
+class Pagination:
 
     def __init__(self, dbgon=True, avg_runtime=1):
-        print(f"{'='*60}\n Pagination.__init__()")
         self.dbgon = dbgon
         self.exp_runtime = avg_runtime
-        self.page_num = 1
-        self.pagelen = 1
+        print(f"{'='*60}\n Pagination.__init__() Starts.")
         super().__init__()
+        print(f"{'='*60}\n Pagination.__init__() Ends.")
 
-    def detect_pagination(self):
+    def _inspect_pagination(self):
         """class-value 'search-results-pagination-section'는 항상 존재하므로, 사용하지마라."""
-        if hasattr(self,'start_dt') is False:
-            self.start_dt = datetime.now().astimezone()
-        indicators = self.driver.find_elements_by_class_name('artdeco-pagination__indicator--number')
-        if len(indicators) is 0:
+        self.pages = self.driver.find_elements_by_class_name('artdeco-pagination__indicator--number')
+        if len(self.pages) is 0:
             self.pages_iterable = False
-            if hasattr(self, 'pages'):
-                delattr(self, 'pages')
+            if hasattr(self, 'pages'): delattr(self, 'pages')
+            self.pagenum = 1
             self.pagelen = 1
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(indicators) is 0.")
-            return False
         else:
-            self.pages_iterable = True
-            self.pages = indicators
-            self.pagelen = int(indicators[-1].text.strip())
-            return True
-
-    def find_selected_page(self):
-        if hasattr(self,'pages'):
+            ############################################################
             for i, page in enumerate(self.pages, start=0):
                 if 'selected' in page.get_attribute('class'):
                     self.selected_page_seq = i
                     self.selected_page = self.pages[i]
-                    self.page_num = int(self.selected_page.text.strip())
-                    print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Selected page is {self.page_num}.")
+                    self.pagenum = int(self.selected_page.text.strip())
+                    print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Selected page is {self.pagenum}.")
                     break
-            if hasattr(self,'selected_page_seq') is False:
-                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Active-page 가 존재하지 않는 말도 안되는 상황.")
-        else:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n hasattr(self,'pages') is False.")
-        return self
-
-    def click_next_page(self):
-        if hasattr(self,'selected_page_seq'):
-            if len(self.pages) is (self.selected_page_seq+1):
+            ############################################################
+            self.pagelen = int(self.pages[-1].text.strip())
+            if self.pagenum == self.pagelen:
                 self.pages_iterable = False
-                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Current selected page({self.page_num}) is the last. Stop iteration.")
+                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Current selected page({self.pagenum}) is the last. Stop iteration.")
             else:
                 self.pages_iterable = True
-                next_page = self.pages[self.selected_page_seq+1]
-                next_page_num = next_page.text.strip()
-                print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Page-Indicator {next_page_num} 클릭.\n scroll_to_pagination : {self.scroll_to_pagination}")
-                button = next_page.find_element_by_tag_name('button')
-                time.sleep(self.scroll_to_pagination)
-                ActionChains(self.driver).move_to_element(button).perform()
-                selenium_clicker(button)
-        else:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n hasattr(self,'selected_page_seq') is False.")
+        ############################################################
+        if self.pagenum is 1:
+            self.pagination_start_dt = datetime.now().astimezone()
+        return self
 
-    def iter_pagination(self):
-        if hasattr(self,'collect_dt') and hasattr(self,'search_keyword') and hasattr(self,'search_location'):
-            self.pages_iterable = True
-            while self.pages_iterable:
-                self.detect_pagination()
-                self.find_selected_page()
-                self.iter_jobcards()
-                self.find_selected_page().click_next_page()
-                self.report_pageloop()
+    def next_page(self, step=1):
+        self._inspect_pagination()
+        if self.pages_iterable:
+            next_page = self.pages[self.selected_page_seq + step]
+            next_pagenum = next_page.text.strip()
+            print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Page-Indicator({next_pagenum}) 클릭.")
+            button = next_page.find_element(By.TAG_NAME, 'button')
+            sln.time_sleeper(secs=1)
+            ActionChains(self.driver).move_to_element(button).perform()
+            sln.clicker(webelem=button, secs=2)
         else:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n hasattr(self,'search_keyword') and hasattr(self,'search_location') is False.")
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n pages_iterable is False.")
+        return self
 
     def report_pageloop(self):
-        cum_runtime = (datetime.now().astimezone() - self.start_dt).total_seconds()
-        avg_runtime = cum_runtime / (self.page_num)
-        leftover_runtime = avg_runtime * (self.pagelen - self.page_num)
+        cum_runtime = (datetime.now().astimezone() - self.pagination_start_dt).total_seconds()
+        avg_runtime = cum_runtime / (self.pagenum)
+        leftover_runtime = avg_runtime * (self.pagelen - self.pagenum)
         if self.dbgon is True:
-            print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]} : {self.page_num}/{self.pagelen}")
+            print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]} : {self.pagenum}/{self.pagelen}")
             tpls = [
                 ('누적실행시간', cum_runtime),
                 ('잔여실행시간', leftover_runtime),
@@ -478,11 +475,16 @@ class Pagination(JobCards):
             for tpl in tpls:
                 timeexp, unit = inumber.convert_timeunit(tpl[1])
                 print(f" {tpl[0]} : {timeexp} ({unit})")
-        if self.pagelen == self.page_num:
+        if self.pagelen == self.pagenum:
             if (self.exp_runtime is not None) and (avg_runtime > self.exp_runtime):
                 print(f"{'*'*60}\n Save the final report into DB.")
 
-class JobsDriver(SearchCondition, Pagination):
+    def iter_pagination(self):
+        self.pages_iterable = True
+        while self.pages_iterable:
+            self.next_page().report_pageloop()
+
+class JobsDriver(SearchCondition, Pagination, JobCards, JobDetails, models.LinkedInJobPosting):
 
     base_url = 'https://www.linkedin.com/jobs/search/'
     search_keywords = [
@@ -500,9 +502,10 @@ class JobsDriver(SearchCondition, Pagination):
     ]
 
     def __init__(self, driver):
-        print(f"{'='*60}\n{self.__class__}.__init__()")
         self.driver = driver
+        print(f"{'='*60}\n JobsDriver.__init__() Starts.")
         super().__init__()
+        print(f"{'='*60}\n JobsDriver.__init__() Ends.")
 
     def move_to_job_search_page(self):
         if re.search(self.base_url, string=self.driver.current_url) is None:
@@ -511,32 +514,40 @@ class JobsDriver(SearchCondition, Pagination):
         else:
             pass
 
-    def if_stay_in_job_search_page(self):
-        if re.search(self.base_url, string=self.driver.current_url) is None:
-            print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 현재페이지가 Job Search page가 아니므로, 이전페이지로 회귀.")
-            self.driver.back()
-        else:
-            pass
-
     def is_readyto_collect(self):
-        uo = urlparse(self.driver.current_url)
-        if ('keywords' in uo.query) and ('location' in uo.query) and ('sortBy' in uo.query):
+        if hasattr(self,'search_keyword') and hasattr(self,'search_location') and hasattr(self,'sort_value') and hasattr(self,'collect_dt'):
+            print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]} : True.")
+            print(f" search_keyword : {self.search_keyword}\n search_location : {self.search_location}\n sort_value : {self.sort_value}\n collect_dt : {self.collect_dt}")
             return True
         else:
+            print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]} : False.")
             return False
 
-    def collect_on_keyword(self, keyword='machine learning', location='Spain', duration=0):
-        fr = dbg.Function(inspect.currentframe()).report_init()
-        ############################################################
+    def _collect_jobposting(self):
         self.collect_dt = datetime.now().astimezone()
+        if self.is_readyto_collect():
+            self.pages_iterable = True
+            while self.pages_iterable:
+                self.jobcards_iterable = True
+                while self.jobcards_iterable:
+                    ############################################################
+                    if self.if_LinkedIn_is_pranking(): self.scrollto_last_jobcard().next_jobcard(step=2)
+                    self.parse_active_jobcard()
+                    if self.if_LinkedIn_is_pranking(): self.scrollto_last_jobcard().next_jobcard(step=2)
+                    self.act_in_job_details()
+                    if self.if_LinkedIn_is_pranking(): self.scrollto_last_jobcard().next_jobcard(step=2)
+                    ############################################################
+                    self.next_jobcard()
+                self.next_page().report_pageloop()
+
+    def collect_on_1condition(self, keyword='machine learning', location='Spain', duration=0):
+        fr = dbg.Function(inspect.currentframe()).report_init()
+        ############################################################ Search-Setup.
         self.move_to_job_search_page()
-        self.put_searching_keyword(keyword, location).choose_date_posted(duration).choose_sort_by('date')
-        self.extract_keyword_location()
-        while self.is_readyto_collect() is False:
-            print("\nself.is_readyto_collect() is False. Wait 2 seconds.\n")
-            time.sleep(2)
-        ############################################################
-        self.iter_pagination()
+        self.put_search_keyword(keyword).put_search_location(location).click_search_button()
+        self.choose_date_posted(duration).choose_sort_by('date')
+        ############################################################ Main.
+        self._collect_jobposting()
         ############################################################
         fr.report_fin()
 
@@ -544,10 +555,17 @@ class JobsDriver(SearchCondition, Pagination):
         fr = dbg.Function(inspect.currentframe()).report_init()
         if search_keywords is None:
             search_keywords = self.search_keywords
+        ############################################################ Search-Setup.
+        self.move_to_job_search_page()
+        self.put_search_location(location).click_search_button()
+        self.choose_date_posted(duration).choose_sort_by('date')
         ############################################################
-        fi = FunctionIterator(obj=search_keywords, func=self.collect_on_keyword, location=location, duration=duration)
-        while fi.iterable:
-            fi.nextop()
+        loop = dbg.Looper(inspect.currentframe(), len(search_keywords), exp_runtime=60*30)
+        for keyword in search_keywords:
+            self.put_search_keyword(keyword).click_search_button()
+            self._collect_jobposting()
+            pass
+            loop.report(f" keyword : {keyword}")
         ############################################################
         fr.report_fin()
 
@@ -557,14 +575,13 @@ class JobsDriver(SearchCondition, Pagination):
 
 class HTMLParser(models.LinkedInJobPosting):
     """HTML element detection만을 위한 regex를 이곳에서 정의한다."""
-    p_posted_time_ago = re.compile('(Posted)\s*(\d+)\s*(.+)ago', flags=re.I)
-    p_views = re.compile('([\d+,]+)\s*(view[s]*)')
+    p_posted_time_ago = re.compile('Posted\s*(\d+)\s*(.+)ago', flags=re.I)
+    p_n_views = re.compile('([\d+,]+)\s*(view[s]*)')
 
-    p_skills_match_ratio = re.compile('\d+ skills match$')
-    p_n_applicants = re.compile('\d+ applicant[s]*')
+    p_skills_match_ratio = re.compile('(\d+/\d+)\s*(skills match$)')
+    p_n_applicants = re.compile('(\d+)\s*(applicant[s]*)')
     p_seniority_level = re.compile('([\w-]+)\s*(level)$')
     p_rng_employees = re.compile('([\d,-]+)\s*(employee[s]*)')
-    p_n_employees = re.compile('^([\d,]+)\s*(employee[s]*)')
 
     # p_seniority_level = re.compile('(\d+)\s*(\w+\s\w+)\s*(applicant[s]*)')
     p_applicant_education = re.compile('^jobs[a-z\s-]+__list')
@@ -573,18 +590,17 @@ class HTMLParser(models.LinkedInJobPosting):
     p_applicant_location_nm = re.compile('top-locations-title$')
     p_applicant_location_cnt = re.compile('top-locations-details$')
 
-    p_total_employees = re.compile('Total employee[s]*', flags=re.I)
+    p_total_employees = re.compile('([0-9,]+)\s*(Total employee[s]*)', flags=re.I)
     p_company_growthrate = re.compile('Company-wide', flags=re.I)
     p_tenure = re.compile('[\.\d+]+\s*year[s]*')
 
-    # filter = {'html':{'$ne':None}, 'desc':None}
-    # filter = {'html':{'$ne':None}}
     filter = {'html':{'$ne':None}, 'collect_dt':{'$ne':None}}
-    projection = {'collect_dt':1,'html':1}
+    projection = {'html':1, 'collect_dt':1}
 
     def __init__(self):
         super().__init__()
-        self.change_schema()
+        self.schema = self.parse_cols
+        # self.change_schema()
         self.cleaner = DataValueCleaner()
 
     def change_schema(self):
@@ -604,53 +620,65 @@ class HTMLParser(models.LinkedInJobPosting):
         if projection is not None:
             self.projection = projection
         self.cursor = self.tbl.find(self.filter, self.projection)
-        self.load()
-        print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(self.docs) : {len(self.docs)}")
+        self.load(True)
         fr.report_fin()
         return self
     ############################################################Job-Card
-    def jobcard_title(self):
-        pass
+    def job_title(self):
+        try:
+            self.topcard_job_title()
+        except Exception as e:
+            self.topcard_job_title()
+        else:
+            pass
 
-    def jobcard_companyname(self):
-        pass
+    def _companyname(self):
+        try:
+            self.topcard_companyname()
+        except Exception as e:
+            self.topcard_companyname()
+        else:
+            pass
 
-    def jobcard_location(self):
-        pass
+    def job_location(self):
+        try:
+            self.topcard_job_location()
+        except Exception as e:
+            self.topcard_job_location()
+        else:
+            pass
     ############################################################Top-Card
     """job-title, companyname, location, posted_time_ago, views"""
     def company_logo(self):
         s = self.soup.find('div', class_='jobs-details-top-card__company-logo-container')
         if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 'jobs-details-top-card__company-logo-container' is None.")
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n s == None.")
         else:
             img = s.find('img')
             if img is None:
                 print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 'img-tag' is None.")
             else:
                 if 'src' in list(img.attrs):
-                    # print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n img.attrs :")
-                    # pp.pprint(img.attrs)
                     self.company_logo_url = img.attrs['src']
 
-    def job_title(self):
+    def topcard_job_title(self):
         s = self.soup.find('h1', class_='jobs-details-top-card__job-title')
         if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 'jobs-details-top-card__job-title' is None.")
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n s == None.")
         else:
             self.title = s.get_text().strip()
 
-    def _companyname(self):
+    def topcard_companyname(self):
         s = self.soup.find('a', class_='jobs-details-top-card__company-url')
         if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 'Top-Card__Company-Name' is None.")
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n s == None.")
         else:
             self.companyname = s.get_text().strip()
 
-    def job_location(self):
+    def topcard_job_location(self):
         s = self.soup.find(class_='jobs-details-top-card__company-info')
         if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n class_='jobs-details-top-card__company-info' is None.")
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n s == None.")
         else:
             companylocation = s.find(class_='jobs-details-top-card__bullet')
             if companylocation is None:
@@ -658,62 +686,98 @@ class HTMLParser(models.LinkedInJobPosting):
             else:
                 self.location = companylocation.get_text().strip()
 
-    def postedtimeago_views(self):
+    def _posted_time_ago(self):
         s = self.soup.find('p', class_='jobs-details-top-card__job-info')
         if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 'jobs-details-top-card__job-info' is None.")
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n s == None.")
         else:
             for string in s.stripped_strings:
                 string = string.strip()
-                if self.p_posted_time_ago.search(string=string) is not None:
+                m = self.p_posted_time_ago.search(string=string)
+                if m is not None:
                     self.posted_time_ago = string
-                    ago_timedelta = self.cleaner.posted_time_ago(v=string, regex=self.p_posted_time_ago)
-                    self.calc_posted_dt(ago_timedelta)
-                if self.p_views.search(string=string) is not None:
-                    self.n_views = self.cleaner.views(v=string, regex=self.p_views)
+                    v = int(m.groups()[0])
+                    unit = m.groups()[1]
+                    if 'second' in unit:
+                        tdelta = timedelta(seconds=v)
+                    elif 'minute' in unit:
+                        tdelta = timedelta(minutes=v)
+                    elif 'hour' in unit:
+                        tdelta = timedelta(hours=v)
+                    elif 'day' in unit:
+                        tdelta = timedelta(days=v)
+                    elif 'week' in unit:
+                        tdelta = timedelta(weeks=v)
+                    elif 'month' in unit:
+                        tdelta = timedelta(days=v*30.5)
+                    elif 'year' in unit:
+                        tdelta = timedelta(days=v*365)
+                    else:
+                        tdelta = v
+                    self.posted_dt = self.collect_dt - tdelta
+        return self
 
-    def calc_posted_dt(self, ago_timedelta):
-        if hasattr(self,'collect_dt'):
-            self.posted_dt = self.collect_dt - ago_timedelta
+    def _n_views(self):
+        s = self.soup.find('p', class_='jobs-details-top-card__job-info')
+        if s is None:
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n s == None.")
         else:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n hasattr(self,'collect_dt') is False.")
+            for string in s.stripped_strings:
+                string = string.strip()
+                m = self.p_n_views.search(string=string)
+                if m is not None:
+                    self.n_views = self.cleaner.purify_number(v=m.groups()[0])
     ############################################################Job-Summary-3-boxes
     def job_box(self):
-        job_box = self.soup.find('div',attrs={'data-test-job-summary-type':'job-list'})
-        if job_box is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 3-boxes | job_box is None.")
-        else:
-            items = job_box.find_all('li')
-            for item in items:
-                text = item.get_text().strip()
-                if self.p_skills_match_ratio.search(string=text) is not None:
-                    self.skills_match_ratio = self.cleaner.skills_match_ratio(text)
-                if self.p_n_applicants.search(string=text) is not None:
-                    self.n_applicants = self.cleaner.n_applicants(text)
-                m = self.p_seniority_level.search(string=text)
-                if m is not None:
-                    self.job_level = m.groups()[0]
-
-    def company_box(self):
-        s = self.soup.find('div',attrs={'data-test-job-summary-type':'company-list'})
-        if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 3-boxes | company_box is None.")
+        try:
+            s = self.soup.find('div',attrs={'data-test-job-summary-type':'job-list'})
+        except Exception as e:
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
         else:
             items = s.find_all('li')
             for item in items:
                 text = item.get_text().strip()
-                if self.p_n_employees.search(string=text) is not None:
-                    self.n_employees = self.cleaner.n_employees(text)
-                m = self.p_rng_employees.search(string=text)
-                if m is not None:
-                    self.rng_employees= m.groups()[0]
-                if len(item) is 2:
-                    self.company_cate = text
 
-    def connections_box(self):
-        s = self.soup.find('div',attrs={'data-test-job-summary-type':"connections-list"})
-        if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 3-boxes | connections_box is None.")
+                m = self.p_skills_match_ratio.search(string=text)
+                if m is not None:
+                    self.skills_match_ratio = m.groups()[0].strip()
+
+                m = self.p_n_applicants.search(string=text)
+                if m is not None:
+                    self.n_applicants = self.cleaner.purify_number(v=m.groups()[0].strip())
+
+                m = self.p_seniority_level.search(string=text)
+                if m is not None:
+                    self.job_level = m.groups()[0].strip()
+
+    def companyinfo_box(self):
+        try:
+            s = self.soup.find('div',attrs={'data-test-job-summary-type':'company-list'})
+        except Exception as e:
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
+        else:
+            items = s.find_all('li')
+            for item in items:
+                text = item.get_text().strip()
+                m = self.p_rng_employees.search(string=text)
+                if m is None:
+                    self.company_cate = text
+                else:
+                    self.rng_employees= m.groups()[0]
+                    if len(self.rng_employees.split('-')) is 2:
+                        min = self.cleaner.purify_number(self.rng_employees.split('-')[0])
+                        max = self.cleaner.purify_number(self.rng_employees.split('-')[1])
+                        self.n_employees = round((min + max)/2, 0)
+                    else:
+                        self.n_employees = self.cleaner.n_employees(self.rng_employees)
+        finally:
+            return self
+
+    def _connections(self):
+        try:
+            s = self.soup.find('div',attrs={'data-test-job-summary-type':"connections-list"})
+        except Exception as e:
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n Exception : {e}")
         else:
             self.connections = []
             for atag in s.find_all('a',attrs={'data-control-name':"jobdetails_sharedconnections"}):
@@ -726,7 +790,7 @@ class HTMLParser(models.LinkedInJobPosting):
     def job_description(self):
         s = self.soup.find(id='job-details')
         if s is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n id='job-details' is None.")
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 'Job-Description' is None.")
         else:
             self.desc = s.find('span').get_text().strip()
 
@@ -848,14 +912,16 @@ class HTMLParser(models.LinkedInJobPosting):
         """Hiring trends over the last 2 years"""
         for li in self.soup.find_all('li',class_='jobs-premium-company-growth__stat-item'):
             mixed_txt = li.get_text().strip()
-            if self.p_total_employees.search(string=mixed_txt) is not None:
-                self.total_employees = self.cleaner.total_employees(mixed_txt)
-            elif self.p_company_growthrate.search(string=mixed_txt) is not None:
+            m1 = self.p_total_employees.search(string=mixed_txt)
+            m2 = self.p_company_growthrate.search(string=mixed_txt)
+            if m1 is not None:
+                self.total_employees = self.cleaner.purify_number(v=m1.groups()[0])
+            elif m2 is not None:
                 text = li.find('span', class_='visually-hidden').get_text().strip()
-                self.company_growthrate = self.cleaner.growth(text)
+                self.company_growthrate = self.cleaner.percent_str(v=text)
             else:
                 text = li.find('span', class_='visually-hidden').get_text().strip()
-                self.sector_growthrate = self.cleaner.growth(text)
+                self.sector_growthrate = self.cleaner.percent_str(v=text)
 
     def _tenure(self):
         """Average tenure"""
@@ -885,28 +951,36 @@ class HTMLParser(models.LinkedInJobPosting):
         for d in self.docs:
             self.attributize(d)
             self.soup = BeautifulSoup(self.html, 'html.parser')
-            self.company_logo()
+            ############################################################
             self.job_title()
             self._companyname()
             self.job_location()
-            self.postedtimeago_views()
+            self.company_logo()
+            self._posted_time_ago()
+            self._n_views()
+            ############################################################
             self.job_box()
-            self.company_box()
-            self.connections_box()
+            self.companyinfo_box()
+            self._connections()
+            ############################################################
             self.job_description()
             self._seniority_level_in_job_description()
             self._industries()
             self._employment_type()
             self._job_functions()
             self.how_you_match()
+            ############################################################
             self._applicant_topskills()
             self._applicant_seniority_levels()
             self._applicant_educations()
             self._applicant_locations()
+            ############################################################
             self.hiring_trend()
             self._tenure()
+            ############################################################
             self.commute()
             self._about_us()
+            ############################################################
             self.update_doc({'_id':d['_id']}, False)
             loop.report()
 
@@ -918,48 +992,11 @@ class DataValueCleaner:
     p_num_str_mix = re.compile('(\d+[./,]*\d*)\s*([a-zA-Z]+)')
     p_extract_just_num = re.compile('\d+[./,]*\d*')
     p_purify_num = re.compile('[\d,\.]+')
-    p_ratio_str = re.compile('([\.\d+]+)\s*(\%)\s*(.*)')
+    p_percent = re.compile('([\.\d+]+)\s*(\%)\s*(.*)')
 
     p_total_employees = re.compile('([0-9,]+)\s*(Total employee[s]*)', flags=re.I)
     p_applicant_location_cnt = re.compile('(\d+\W\d+|\d+)\s*(applicant[s]*)')
     ############################################################Top-Card
-    def posted_time_ago(self, v, regex):
-        if isinstance(v, str) and len(v) > 0:
-            v = v.strip()
-            m = regex.search(string=v)
-            if m is None:
-                print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m is None.\n posted_time_ago : {v}")
-            else:
-                num = int(m.groups()[1])
-                if 'second' in v:
-                    tdelta = timedelta(seconds=num)
-                elif 'minute' in v:
-                    tdelta = timedelta(minutes=num)
-                elif 'hour' in v:
-                    tdelta = timedelta(hours=num)
-                elif 'day' in v:
-                    tdelta = timedelta(days=num)
-                elif 'week' in v:
-                    tdelta = timedelta(weeks=num)
-                elif 'month' in v:
-                    tdelta = timedelta(days=num*30.5)
-                elif 'year' in v:
-                    tdelta = timedelta(days=num*365)
-                else:
-                    print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n 이런 경우는 발생할 수 없다.\n posted_time_ago : {v}")
-        else:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n isinstance(v, str) and len(v) > 0 is False.\n posted_time_ago : {v}")
-        return tdelta
-
-    def views(self, v, regex):
-        m = regex.search(string=v)
-        if m is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m is None.")
-        else:
-            v = m.groups()
-            # print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m.group() : {v}")
-            v = self._purify_number(v[0])
-        return v
     ############################################################Common-functions
     def _clean_num_str_mix(self, v):
         m = self.p_num_str_mix.search(string=v)
@@ -970,7 +1007,7 @@ class DataValueCleaner:
             # print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m.groups() : {v}")
         return v[0]
 
-    def _purify_number(self, v):
+    def purify_number(self, v):
         try:
             m = self.p_purify_num.search(string=v)
         except Exception as e:
@@ -985,26 +1022,13 @@ class DataValueCleaner:
         finally:
             return v
 
-    def skills_match_ratio(self, v):
-        v = self._clean_num_str_mix(v)
-        return v
-
-    def n_applicants(self, v):
-        v = self._clean_num_str_mix(v)
-        v = self._purify_number(v)
-        return int(v)
-
-    def n_employees(self, v):
-        v = self._purify_number(v)
-        return v
-
     def connection_cnt(self, v):
         v = self._clean_num_str_mix(v)
-        v = self._purify_number(v)
+        v = self.purify_number(v)
         return int(v)
     ############################################################Competitive_intelligence_about_applicants
     def applicants_integer(self, v):
-        v = self._purify_number(v)
+        v = self.purify_number(v)
         return int(v)
 
     def applicant_location_cnt(self, v):
@@ -1017,24 +1041,12 @@ class DataValueCleaner:
             v = v[0]
         return v
     ############################################################Premium-Services
-    def total_employees(self, v):
-        m = self.p_total_employees.search(string=v)
-        if m is None:
-            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m is None.\n v : {v}")
-        else:
-            v = m.groups()
-            # print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m.groups() : {v}")
-            v = self._purify_number(v[0])
-            v = int(v)
-        return v
-
-    def growth(self, v):
-        m = self.p_ratio_str.search(string=v)
+    def percent_str(self, v):
+        m = self.p_percent.search(string=v)
         if m is None:
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m is None.")
         else:
             g = m.groups()
-            # print(f"{'='*60}\n{self.__class__} | {inspect.stack()[0][3]}\n m.groups() : {g}")
             v = int(g[0]) / 100
             if 'decre' in g[2]:
                 v *= -1
@@ -1042,7 +1054,7 @@ class DataValueCleaner:
 
     def tenure(self, v):
         v = self._clean_num_str_mix(v)
-        v = self._purify_number(v)
+        v = self.purify_number(v)
         return float(v)
 
 #============================================================
@@ -1195,7 +1207,128 @@ class DocDataParser(models.LinkedInJobPosting):
             numdf[col] = numdf[col].apply(lambda x: x if x is np.nan else int(x))
         return numdf
 
+def prepare_data():
+    """collect 완료 후,"""
+    dup = Deduplicator(phase=1)
+    dup.load_targets().inspect_dup_df()
+    dup.delete_dup_data()
+    parse()
+    dup = Deduplicator(phase=2)
+    dup.load_targets().inspect_dup_df()
+    dup.delete_dup_data()
 
+#============================================================
+"""Analyzer."""
+#============================================================
+
+class Analyzer(models.LinkedInJobPosting):
+
+    filter = {'html':{'$ne':None}}
+
+    def __init__(self):
+        super().__init__()
+        self.schema = self.analyze_cols
+
+    def listcol_valfreq_df(self, col, search_location=None):
+        if col in self.listtype_cols:
+            filter = {col:{'$ne':None}}
+            if search_location is not None:
+                filter.update({'search_location':{'$regex':search_location,'$options':'i'}})
+            self.cursor = self.tbl.find(filter, projection={'_id':1, col:1})
+            self.load(True)
+            jndf = json_normalize(self.docs, col).rename(columns={0:col})
+            jndf['freq'] = 1
+            return jndf.groupby(col).count().sort_values(by='freq', ascending=False)
+        else:
+            print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n입력한 컬럼({col})은 'self.listtype_cols'에 정의되어 있지 않다.")
+
+    def deindex(self, df):
+        _df = df.copy()
+        _df[_df.index.name] = _df.index
+        _df.index = range(len(_df))
+        return _df
+
+class SkillAnalyzer(Analyzer):
+
+    def __init__(self):
+        super().__init__()
+
+    def make_skillfreq_df(self):
+        matchskill_freqdf = self.listcol_valfreq_df(col='match_skills')
+        applicantskill_frqdf = self.listcol_valfreq_df(col='applicant_topskills')
+
+        matchskill_freqdf.index.name = 'skill'
+        applicantskill_frqdf.index.name = 'skill'
+
+        matchskill_freqdf = matchskill_freqdf.rename(columns={'freq':'matchskill'})
+        applicantskill_frqdf = applicantskill_frqdf.rename(columns={'freq':'applicantskill'})
+
+        freqdf = matchskill_freqdf.join(applicantskill_frqdf)
+        freqdf = freqdf.fillna(0)
+        freqdf = freqdf.applymap(lambda x: int(x))
+        return freqdf
+
+    def plot_scatter(self, scttdf, title, xlabel, ylabel, figsize=(18,10)):
+        fig, ax = plt.subplots(figsize=figsize)
+        for color, freqname in zip(['tab:blue', 'tab:red'], list(scttdf.columns)):
+            df = scttdf.reindex(columns=[freqname])
+            x = df.index
+            y = df[freqname]
+            ax.scatter(x, y, c=color, s=None, label=freqname,
+                       alpha=0.5, edgecolors='none')
+
+        ax.set_title(title)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.legend()
+        ax.grid(True)
+        self.fig = fig
+        self.plt = plt
+        plt.show()
+
+    def plot_bar(self, df, title, ylabel, figsize=(18,10)):
+        ind = np.arange(len(df))  # the x locations for the groups
+        width = 0.1  # the width of the bars
+        fig, ax = plt.subplots(figsize=figsize)
+        rects1 = ax.bar(x=ind - width/2, height=list(df.matchskill), width=0.8, label='matchskill')
+        rects2 = ax.bar(x=ind + width/2, height=list(df.applicantskill), width=0.8, label='applicantskill')
+
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        ax.set_xticks(ind)
+        # ax.set_xticklabels(list(df.index))
+        ax.legend()
+        def autolabel(rects, xpos='center'):
+            ha = {'center': 'center', 'right': 'left', 'left': 'right'}
+            offset = {'center': 0, 'right': 1, 'left': -1}
+
+            for rect in rects:
+                height = rect.get_height()
+                ax.annotate('{}'.format(height),
+                            xy=(rect.get_x() + rect.get_width() / 2, height),
+                            xytext=(offset[xpos]*3, 3),  # use 3 points offset
+                            textcoords="offset points",  # in both directions
+                            ha=ha[xpos], va='bottom')
+
+        autolabel(rects1, "left")
+        autolabel(rects2, "right")
+
+        fig.tight_layout()
+        self.fig = fig
+        self.plt = plt
+        plt.show()
+
+    def compare_with_my_skills(self, freqdf):
+        myskilldf = pd.read_csv(f"{DATA_PATH}/myskills.csv")
+        myskills = list(myskilldf.skill)
+        TF = freqdf.index.isin(myskills)
+        comparedf = freqdf[TF]
+        comparedf['myskill'] = comparedf.index
+        comparedf.index = range(len(comparedf))
+        comparedf = comparedf.rename(columns={
+            'matchskill':'required_skill', 'applicantskill':'applicants_skill'
+        }).reindex(columns=['myskill','required_skill','applicants_skill'])
+        return comparedf
 
 #============================================================
 """Handler."""
@@ -1204,46 +1337,88 @@ class DocDataParser(models.LinkedInJobPosting):
 """테이블 중복제거."""
 class Deduplicator(models.LinkedInJobPosting):
 
-    input_consts = ['search_keyword','search_location']
-    input_vars = ['collect_dt']
-    output_consts = ['title','companyname','location']
-    output_vars = ['posted_time_ago']
-    subset = input_consts + input_vars + output_consts + output_vars
-    cols_order = input_consts + output_consts + input_vars + output_vars + ['_id']
-    """최근 수집-파싱을 분리한 데이터에 대해."""
-    # filter = {'html':{'$ne':None}, 'desc':{'$ne':None}}
-    """예전 html 없는 데이터에 대해."""
-    filter = {'desc':{'$ne':None}}
-    projection = {col:1 for col in subset}
+    def __init__(self, phase):
+        super().__init__()
+        input_consts = ['search_keyword','search_location']
+        input_vars = ['collect_dt']
+        output_consts = ['title','companyname','location']
+        output_vars = ['posted_time_ago']
+        self.phase = phase
+        if phase is 1:
+            self.cols_order = input_consts + output_consts + input_vars + output_vars + ['_id']
+            """예전 html 없는 데이터에 대해."""
+            self.filter = {'desc':{'$ne':None}}
+            """최근 수집-파싱을 분리한 데이터에 대해."""
+            self.filter = {'html':{'$ne':None}, 'desc':{'$ne':None}}
+            self.subset = input_consts + input_vars + output_consts + output_vars
+            self.projection = {col:1 for col in self.subset}
+        else:
+            """2차 중복제거 시."""
+            self.cols_order = input_consts + output_consts + ['posted_dt'] + ['_id']
+            self.filter = {'posted_dt':{'$ne':None}}
+            self.subset = input_consts + output_consts + ['posted_dt']
+            self.projection = {col:1 for col in self.subset}
 
     def load_targets(self):
         self.cursor = self.tbl.find(self.filter, self.projection)
-        self.load()
-        print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(docs) : {len(self.docs)}")
-        return self
+        return self.load(True)
 
-    def normalize_collect_dt(self, df):
+    def _normalize_collect_dt(self, df):
         df = df.dropna(axis=0, how='any', thresh=None, subset=['collect_dt'])
         df.collect_dt = df.collect_dt.apply(lambda x: datetime(x.year, x.month, x.day, x.hour))
         return df
 
-    def get_dup_df(self, keep):
+    def _get_dup_df(self, keep):
         if hasattr(self,'docs'):
-            df = self.get_df().sort_values(by=self.cols_order)
-            df = self.normalize_collect_dt(df)
+            df = self.get_df().sort_values(by=self.cols_order).reindex(columns=self.cols_order)
+            if self.phase is 1:
+                df = self._normalize_collect_dt(df)
             TF = df.duplicated(subset=self.subset, keep=keep)
-            print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(df[TF]) : {len(df[TF])}")
+            print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n df.duplicated len : {len(df[TF])}")
             return df[TF]
         else:
             print(f"{'#'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n if hasattr(self,'docs') is False.")
 
-    def review_dup_df(self):
-        df = self.get_dup_df(keep=False)
-        if len(df) is not 0:
-            return df.sort_values(by=self.cols_order).reindex(columns=self.cols_order)
+    def inspect_dup_df(self):
+        """
+        False : Mark all duplicates as True.
+        first : Mark duplicates as True except for the first occurrence.
+        last : Mark duplicates as True except for the last occurrence.
+        """
+        df1 = self._get_dup_df(keep=False)
+        df2 = self._get_dup_df(keep='first')
+        if len(df2) is not 0:
+            self.deleting_ids = list(df2._id)
+        print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n dup_df(keep=False) len : {len(df1)}\n dup_df(keep='first') len : {len(df2)}")
+        return df1, df2
 
     def delete_dup_data(self):
-        df = self.get_dup_df(keep='first')
-        if len(df) is not 0:
-            self.DeleteResult = self.tbl.delete_many({'_id':{'$in':list(df._id)}})
-            print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n DeleteResult : {self.DeleteResult}")
+        if hasattr(self, 'deleting_ids'):
+            self.delete_many_result(filter={'_id':{'$in':self.deleting_ids}}, report=True)
+
+    def report_status_after_1st_dedup(self):
+        print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}")
+        ############################################################
+        ids = self.tbl.distinct('_id', {'html':{'$ne':None}})
+        print(" tbl.distinct('_id', {'html':{'$ne':None}})")
+        print(f" len(ids) : {len(ids)}")
+        ############################################################
+        ids = self.tbl.distinct('_id', {'html':None})
+        print(" tbl.distinct('_id', {'html':None})")
+        print(f" len(ids) : {len(ids)}")
+        ############################################################
+        ids = self.tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':{'$ne':None}})
+        print(" tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':{'$ne':None}})")
+        print(f" len(ids) : {len(ids)}")
+        ############################################################
+        ids = self.tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':None})
+        print(" tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':None})")
+        print(f" len(ids) : {len(ids)}")
+        ############################################################
+        ids = self.tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':{'$ne':None}, 'posted_dt':{'$ne':None}})
+        print(" tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':{'$ne':None}, 'posted_dt':{'$ne':None}})")
+        print(f" len(ids) : {len(ids)}")
+        ############################################################
+        ids = self.tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':{'$ne':None}, 'posted_dt':None})
+        print(" tbl.distinct('_id', {'html':{'$ne':None}, 'collect_dt':{'$ne':None}, 'posted_dt':None})")
+        print(f" len(ids) : {len(ids)}")

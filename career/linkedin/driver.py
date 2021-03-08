@@ -1,5 +1,6 @@
 
 from .jobs import JobsDriver
+from .profile import ProfileDriver
 import os
 import time
 import inspect
@@ -66,3 +67,4 @@ class LinkedInDriver:
     def setup_services(self):
         if self.logined:
             self.jobs = JobsDriver(self.driver)
+            self.profile = ProfileDriver(self.driver)

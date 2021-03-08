@@ -4,6 +4,9 @@ db = MongoClient()['career']
 import pandas as pd
 import copy
 import re
+import inspect
+from career.ide import *
+import idebug as dbg
 
 
 class ModelHandler:
@@ -37,9 +40,7 @@ class ModelHandler:
         return self
 
 class Model(ModelHandler):
-    """
-    http://api.mongodb.com/python/current/api/pymongo/results.html#pymongo.results.InsertManyResult
-    """
+    
     def __init__(self, modelclass):
         self.tbl = db[modelclass.__name__]
         # self.modelname = modelclass.__name__
@@ -78,12 +79,16 @@ class Model(ModelHandler):
         self.UpdateResult = self.tbl.update_many(filter, update, upsert)
         return self
 
-    def delete_result(self, filter):
+    def delete_many_result(self, filter, report=False):
         self.DeleteResult = self.tbl.delete_many(filter)
+        if report:
+            dbg.DeleteResult(clss=self.DeleteResult, caller=f"{self.__class__} | {inspect.stack()[0][3]}")
         return self
 
-    def load(self):
+    def load(self, report=False):
         self.docs = list(self.cursor)
+        if report:
+            print(f"{'*'*60}\n{self.__class__} | {inspect.stack()[0][3]}\n len(docs) : {len(self.docs)}")
         return self
 
 class DatabaseMigrator:

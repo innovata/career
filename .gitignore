@@ -1,44 +1,24 @@
 #########################################
 
 
-# Editor temporary/working/backup files #
-##########################################
-.#*
-*\#*\#
-[#]*#
-*~
-*$
-*.bak
-*flymake*
-*.iml
-*.kdev4
-*.log
-*.swp
-*.pdb
-.project
-.pydevproject
-.settings
-.idea
-.vagrant
-.noseids
-.ipynb_checkpoints
-.tags
-.cache/
-.vscode/
+# OS generated files #
+######################
+.directory
+.gdb_history
+.DS_Store
+ehthumbs.db
+Icon?
+Thumbs.db
 
-# Compiled source #
-###################
-*.a
-*.com
-*.class
-*.dll
-*.exe
-*.pxi
-*.o
-*.py[ocd]
-*.so
-.build_cache_dir
-MANIFEST
+
+# Generated Sources #
+#####################
+!skts.c
+!np_datetime.c
+!np_datetime_strings.c
+*.c
+*.cpp
+
 
 # Python files #
 ################
@@ -67,14 +47,47 @@ coverage_html_report
 *.pytest_cache
 env/
 
-# OS generated files #
-######################
-.directory
-.gdb_history
-.DS_Store
-ehthumbs.db
-Icon?
-Thumbs.db
+
+# Compiled source #
+###################
+*.a
+*.com
+*.class
+*.dll
+*.exe
+*.pxi
+*.o
+*.py[ocd]
+*.so
+.build_cache_dir
+MANIFEST
+
+
+# Editor temporary/working/backup files #
+##########################################
+.#*
+*\#*\#
+[#]*#
+*~
+*$
+*.bak
+*flymake*
+*.iml
+*.kdev4
+*.log
+*.swp
+*.pdb
+.project
+.pydevproject
+.settings
+.idea
+.vagrant
+.noseids
+.ipynb_checkpoints
+.tags
+.cache/
+.vscode/
+
 
 # Data files #
 ##############
@@ -86,13 +99,6 @@ pandas/io/*.json
 scikits
 data/
 
-# Generated Sources #
-#####################
-!skts.c
-!np_datetime.c
-!np_datetime_strings.c
-*.c
-*.cpp
 
 # Unit / Performance Testing #
 ##############################
@@ -100,6 +106,7 @@ asv_bench/env/
 asv_bench/html/
 asv_bench/results/
 asv_bench/pandas/
+
 
 # Documentation generated files #
 #################################
@@ -113,5 +120,8 @@ doc/build/html/index.html
 doc/tmp.sv
 doc/source/styled.xlsx
 doc/source/templates/
-env/
 doc/source/savefig/
+
+
+# etc. #
+#################################
